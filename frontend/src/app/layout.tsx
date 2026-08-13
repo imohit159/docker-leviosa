@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import { AppShell } from '@/components/layout/app-shell';
 import { Providers } from './providers';
 import { cn } from '@/lib/utils';
 import './globals.css';
@@ -36,9 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={cn(GeistSans.variable, GeistMono.variable)}
     >
       <body className="min-h-screen">
-        <Providers>
-          <AppShell>{children}</AppShell>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

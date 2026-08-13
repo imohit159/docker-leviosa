@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { ByteFormat, CountFormat, TimeFormat } from '@leviosa/shared';
 import type { VolumeDetail } from '@leviosa/shared';
-import { ScanSourceCopy } from '@/lib/constants';
+import { Route, ScanSourceCopy } from '@/lib/constants';
 import { useScan, useVolumeDetail } from '@/hooks/index.hooks';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -104,7 +104,7 @@ export default function VolumeDetailPage({ params }: { params: Promise<{ name: s
   return (
     <div className="flex flex-col gap-5 pt-6">
       <Link
-        href="/"
+        href={Route.DASHBOARD}
         className="group inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft

@@ -1,11 +1,26 @@
 import { DeleteVerdict, MeasurementFreshness, ScanSource, VolumeUsage } from '@leviosa/shared';
 
 /**
- * Dark ships as the default: this tool sits next to a terminal, and the status hues
- * were tuned against a near-black canvas first. `enableSystem` still honours the OS.
+ * Light ships as the default: the product surface is a reading instrument — tables,
+ * verdicts, numbers — and the light palette carries that density with less eye
+ * strain in daylight. Dark stays first-class via the switch, and `enableSystem`
+ * still honours the OS preference.
  */
 export const ThemeConfig = Object.freeze({
-  DEFAULT: 'dark',
+  DEFAULT: 'light',
+} as const);
+
+/**
+ * Every internal path in one place. `/` is the marketing landing; the product lives
+ * under `/volumes`, so "open the dashboard" and "read about the tool" are different
+ * URLs that can evolve independently.
+ */
+export const Route = Object.freeze({
+  LANDING: '/',
+  DASHBOARD: '/volumes',
+  volume(name: string): string {
+    return `/volumes/${encodeURIComponent(name)}`;
+  },
 } as const);
 
 /**

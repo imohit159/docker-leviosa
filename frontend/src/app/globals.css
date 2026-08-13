@@ -93,67 +93,71 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Light: cool neutrals, never pure white — long dashboard sessions, less glare. */
+/*
+ * Light is the shipping default: warm greige canvas, pure-white cards, near-black
+ * ink, exactly one accent hue. The canvas is deliberately not white — white is
+ * reserved for cards, so elevation reads from value, not from drop shadows.
+ */
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  --background: #fbfcfd;
-  --foreground: #10131a;
+  --background: #f7f7f5;
+  --foreground: #1c1c19;
   --card: #ffffff;
-  --card-foreground: #10131a;
+  --card-foreground: #1c1c19;
   --popover: #ffffff;
-  --popover-foreground: #10131a;
+  --popover-foreground: #1c1c19;
   --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #f1f3f7;
-  --secondary-foreground: #10131a;
-  --muted: #f1f3f7;
-  --muted-foreground: #5b6478;
-  --accent: #eef1f6;
-  --accent-foreground: #10131a;
+  --secondary: #f0f0ed;
+  --secondary-foreground: #1c1c19;
+  --muted: #f0f0ed;
+  --muted-foreground: #6b6b64;
+  --accent: #efeff0;
+  --accent-foreground: #1c1c19;
   --destructive: #d92b4b;
   --destructive-foreground: #ffffff;
-  --border: #e3e7ee;
-  --input: #d5dbe5;
+  --border: #e7e7e3;
+  --input: #d9d9d4;
   --ring: #2563eb;
 
   --surface: #ffffff;
-  --surface-raised: #f7f9fb;
-  --surface-hover: #eef1f6;
+  --surface-raised: #fafaf8;
+  --surface-hover: #f0f0ed;
 
   --brand: #2563eb;
-  --brand-soft: #e8efff;
-  --brand-line: #bcd0fb;
+  --brand-soft: #e9effe;
+  --brand-line: #c2d3fb;
 
-  --ok: #0f9d63;
-  --ok-soft: #e4f7ef;
-  --ok-line: #a9e3c9;
+  --ok: #14915d;
+  --ok-soft: #e5f6ee;
+  --ok-line: #abe2c8;
 
-  --warn: #b57d0a;
-  --warn-soft: #fdf3dc;
-  --warn-line: #eed69a;
+  --warn: #ad7708;
+  --warn-soft: #fbf3dd;
+  --warn-line: #ecd59c;
 
   --danger: #d92b4b;
   --danger-soft: #fdeaee;
   --danger-line: #f5bcc7;
 
   --chart-1: #2563eb;
-  --chart-2: #0f9d63;
-  --chart-3: #b57d0a;
+  --chart-2: #14915d;
+  --chart-3: #ad7708;
   --chart-4: #7c5cf0;
   --chart-5: #0e8f9e;
 
-  --sidebar: #f7f9fb;
-  --sidebar-foreground: #10131a;
+  --sidebar: #f7f7f5;
+  --sidebar-foreground: #1c1c19;
   --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef1f6;
-  --sidebar-accent-foreground: #10131a;
-  --sidebar-border: #e3e7ee;
+  --sidebar-accent: #efeff0;
+  --sidebar-accent-foreground: #1c1c19;
+  --sidebar-border: #e7e7e3;
   --sidebar-ring: #2563eb;
 }
 
-/* Dark is the default shipping theme: this tool lives next to a terminal. */
+/* Dark stays first-class for terminal-adjacent sessions; one toggle away. */
 .dark {
   --background: #08090d;
   --foreground: #e8eaf0;

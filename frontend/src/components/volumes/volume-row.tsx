@@ -1,10 +1,11 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { MeasurementFreshness, TimeFormat } from '@leviosa/shared';
 import type { VolumeSummary } from '@leviosa/shared';
-import { FreshnessCopy, VerdictCopy } from '@/lib/constants';
+import { FreshnessCopy, Route, VerdictCopy } from '@/lib/constants';
 import { useScan } from '@/hooks/index.hooks';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,11 @@ import { ByteMetric } from '@/components/ui/metric';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { CopyButton } from '@/components/unlumen-ui/copy';
 import { UsageBadge } from './usage-badge';
+
+/** Nested controls (Measure, Copy) must not also trigger row navigation. */
+function stopRowNavigation(event: MouseEvent) {
+  event.stopPropagation();
+}
 
 /** Consumer summary: the first name inline, the full list in a tooltip. */
 function ConsumerCell({ volume }: { volume: VolumeSummary }) {
@@ -72,7 +78,10 @@ function SizeCell({ volume }: { volume: VolumeSummary }) {
         size="xs"
         variant="outline"
         loading={scan.isRunning}
-        onClick={scan.start}
+        onClick={(event) => {
+          stopRowNavigation(event);
+          scan.start();
+        }}
         title="Measure this volume"
       >
         {scan.isRunning ? 'Measuring' : 'Measure'}
@@ -101,14 +110,34 @@ function SizeCell({ volume }: { volume: VolumeSummary }) {
 }
 
 export function VolumeRow({ volume }: { volume: VolumeSummary }) {
+  const router = useRouter();
   const safe = volume.safety.deletable;
-  const href = `/volumes/${encodeURIComponent(volume.name)}`;
+  const href = Route.volume(volume.name);
+
+  const open = () => {
+    router.push(href);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open();
+    }
+  };
 
   return (
-    <tr className="group border-b border-border transition-colors last:border-0 hover:bg-accent/60">
+    <tr
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${volume.name}`}
+      title={VerdictCopy[volume.safety.verdict]}
+      onClick={open}
+      onKeyDown={onKeyDown}
+      className="group cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none"
+    >
       <td className="max-w-0 py-2.5 pl-4">
         <div className="flex min-w-0 items-center gap-1.5">
-          <Link href={href} className="block min-w-0 flex-1">
+          <div className="min-w-0 flex-1">
             <span className="identifier block truncate text-[13px] text-foreground transition-colors group-hover:text-brand">
               {volume.name}
             </span>
@@ -117,7 +146,7 @@ export function VolumeRow({ volume }: { volume: VolumeSummary }) {
                 compose · {volume.composeProject}
               </span>
             ) : null}
-          </Link>
+          </div>
           {/* Reveal-on-hover: you almost always want this name in a docker command
               next, and a permanently visible icon per row would be visual static. */}
           <CopyButton
@@ -125,6 +154,7 @@ export function VolumeRow({ volume }: { volume: VolumeSummary }) {
             variant="ghost"
             size="xs"
             aria-label={`Copy ${volume.name}`}
+            onClick={stopRowNavigation}
             className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
           />
         </div>
@@ -160,14 +190,9 @@ export function VolumeRow({ volume }: { volume: VolumeSummary }) {
       </td>
 
       <td className="py-2.5 pr-4 text-right">
-        <Link
-          href={href}
-          className="inline-flex items-center text-muted-foreground transition-colors hover:text-brand"
-          aria-label={`Open ${volume.name}`}
-          title={VerdictCopy[volume.safety.verdict]}
-        >
+        <span className="inline-flex items-center text-muted-foreground transition-colors group-hover:text-brand">
           <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
-        </Link>
+        </span>
       </td>
     </tr>
   );

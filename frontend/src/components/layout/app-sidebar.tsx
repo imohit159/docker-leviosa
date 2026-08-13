@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Boxes, CircleSlash, HardDrive, Layers, PlayCircle } from 'lucide-react';
+import { CircleSlash, HardDrive, Layers, PlayCircle } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { ByteFormat } from '@leviosa/shared';
 import type { SystemSummary } from '@leviosa/shared';
-import { SearchParam, VolumeScope } from '@/lib/constants';
+import { Route, SearchParam, VolumeScope } from '@/lib/constants';
 import type { VolumeScopeId } from '@/lib/constants';
 import { useSystemSummary } from '@/hooks/index.hooks';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Highlight, HighlightItem } from '@/components/unlumen-ui/primitives/effects/highlight';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
 import { cn } from '@/lib/utils';
@@ -34,7 +35,9 @@ function scopeCount(summary: SystemSummary | undefined, id: VolumeScopeId): numb
 
 function scopeHref(id: VolumeScopeId): string {
   const scope = VolumeScope.find((entry) => entry.id === id);
-  return scope?.usage ? `/?${SearchParam.USAGE}=${scope.usage}` : '/';
+  return scope?.usage
+    ? `${Route.DASHBOARD}?${SearchParam.USAGE}=${scope.usage}`
+    : Route.DASHBOARD;
 }
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -46,7 +49,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   // A volume detail route belongs to no scope: highlighting "All volumes" there would
   // claim a filter is applied when none is.
   const activeId: VolumeScopeId | null =
-    pathname === '/'
+    pathname === Route.DASHBOARD
       ? (VolumeScope.find((scope) => scope.usage === activeUsage)?.id ?? 'all')
       : null;
 
@@ -132,7 +135,7 @@ function ReclaimCallout() {
 
   return (
     <Link
-      href={`/?${SearchParam.USAGE}=ORPHANED`}
+      href={`${Route.DASHBOARD}?${SearchParam.USAGE}=ORPHANED`}
       className={cn(
         'mx-2.5 block rounded-lg border p-3 transition-colors',
         hasReclaimable
@@ -182,10 +185,8 @@ function CoverageNote() {
 
 export function SidebarBrand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-4 py-4">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand ring-1 ring-brand-line ring-inset">
-        <Boxes className="size-4.5" aria-hidden />
-      </span>
+    <Link href={Route.LANDING} className="flex items-center gap-2.5 px-4 py-4">
+      <BrandMark />
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="text-sm font-semibold tracking-tight">Leviosa</span>
         <span className="truncate text-[11px] text-muted-foreground">Docker volume insight</span>

@@ -6,7 +6,7 @@ import { ByteFormat, PaginationDefaults, SortDirection, VolumeSortKey } from '@l
 import type { VolumeListQuery } from '@leviosa/shared';
 import { CommandMenu } from '@/components/unlumen-ui/command-menu';
 import type { CommandMenuGroupDef } from '@/components/unlumen-ui/command-menu';
-import { SearchParam, VolumeScope } from '@/lib/constants';
+import { Route, SearchParam, VolumeScope } from '@/lib/constants';
 import { useVolumes } from '@/hooks/index.hooks';
 
 const SCOPE_ICON = {
@@ -37,7 +37,9 @@ export function CommandPalette() {
       items: VolumeScope.map((scope) => ({
         label: scope.label,
         icon: SCOPE_ICON[scope.id],
-        href: scope.usage ? `/?${SearchParam.USAGE}=${scope.usage}` : '/',
+        href: scope.usage
+          ? `${Route.DASHBOARD}?${SearchParam.USAGE}=${scope.usage}`
+          : Route.DASHBOARD,
         keywords: [scope.hint],
       })),
     };
@@ -46,7 +48,7 @@ export function CommandPalette() {
       // Size rides along in the label so the palette is a ranked list you can read,
       // not just a jump target.
       label: `${volume.name}  ·  ${ByteFormat.humanize(volume.size?.totalBytes ?? null)}`,
-      href: `/volumes/${encodeURIComponent(volume.name)}`,
+      href: Route.volume(volume.name),
       keywords: [
         volume.name,
         volume.composeProject ?? '',
