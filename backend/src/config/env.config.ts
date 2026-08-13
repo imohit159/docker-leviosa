@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 import { z } from 'zod';
 import { MillisIn } from '@leviosa/shared';
-import { NodeEnv } from './constants.config.js';
+import { DockerEndpoint, NodeEnv } from './constants.config.js';
 
 /**
  * The one and only place `process.env` is read. Everything downstream imports the
@@ -38,6 +38,13 @@ const csvFromEnv = z.string().transform((value) =>
  */
 const DEFAULT_CORS_ORIGINS: string[] = ['http://localhost:4200', 'http://127.0.0.1:4200'];
 
+/**
+ * Resolved once, from the host platform, because the correct answer differs by OS and
+ * a developer should not have to write a .env file to talk to their own daemon.
+ */
+const DEFAULT_DOCKER_SOCKET_PATH =
+  process.platform === 'win32' ? DockerEndpoint.WINDOWS_PIPE : DockerEndpoint.UNIX_SOCKET;
+
 const envSchema = z.object({
   NODE_ENV: z.enum([NodeEnv.DEVELOPMENT, NodeEnv.PRODUCTION, NodeEnv.TEST]).default(NodeEnv.DEVELOPMENT),
   HOST: z.string().min(1).default('127.0.0.1'),
@@ -48,8 +55,12 @@ const envSchema = z.object({
   BODY_LIMIT: z.string().default('64kb'),
   SHUTDOWN_GRACE_MS: z.coerce.number().int().min(0).default(10 * MillisIn.SECOND),
 
-  /** Unix socket path to the Engine API. Ignored when DOCKER_HOST is a TCP URL. */
-  DOCKER_SOCKET_PATH: z.string().min(1).default('/var/run/docker.sock'),
+  /**
+   * Local path to the Engine API: a unix socket on macOS/Linux, a named pipe on
+   * Windows. Defaults to whichever suits the current platform; ignored when
+   * DOCKER_HOST is a TCP URL.
+   */
+  DOCKER_SOCKET_PATH: z.string().min(1).default(DEFAULT_DOCKER_SOCKET_PATH),
   DOCKER_HOST: z.string().optional(),
   DOCKER_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(30 * MillisIn.SECOND),
   /** How long a listing of volumes/containers may be reused before re-polling. */

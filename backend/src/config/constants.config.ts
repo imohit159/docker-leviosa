@@ -138,6 +138,24 @@ export const PROTECTED_LABEL_PREFIXES: readonly string[] = Object.freeze([
   'io.leviosa.protected',
 ]);
 
+/**
+ * Where the Engine API listens, per platform.
+ *
+ * Docker Desktop on Windows publishes the Engine over a named pipe; `/var/run/docker.sock`
+ * is not merely absent there, it is unrepresentable. Defaulting every platform to the
+ * unix socket makes the API come up "healthy", report `daemonReachable: false`, and
+ * answer every data endpoint with a 503 whose only clue is `connect ENOENT
+ * /var/run/docker.sock` — which reads like a broken install rather than a wrong path.
+ *
+ * macOS and Linux both keep the conventional unix socket, so one branch covers it.
+ * Anything unusual (rootless, a remote daemon, a colima socket) is what DOCKER_HOST is
+ * for and overrides this entirely.
+ */
+export const DockerEndpoint = Object.freeze({
+  WINDOWS_PIPE: '//./pipe/docker_engine',
+  UNIX_SOCKET: '/var/run/docker.sock',
+} as const);
+
 /** Docker Engine API error codes we translate rather than leak. */
 export const DockerErrno = Object.freeze({
   NOT_FOUND: 404,

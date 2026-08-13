@@ -6,6 +6,13 @@ const log = Logger.for('docker-client');
 
 const TCP_SCHEMES = new Set(['tcp:', 'http:', 'https:']);
 const UNIX_SCHEME = 'unix:';
+/**
+ * Windows named pipes are matched as a raw prefix rather than parsed as a URL. `new
+ * URL('npipe:////./pipe/docker_engine')` normalises the `/.` segment away and reports
+ * its pathname as `//pipe/docker_engine`, which is a different, nonexistent pipe — so
+ * URL parsing cannot be used on this scheme at all.
+ */
+const NPIPE_PREFIX = 'npipe://';
 
 /**
  * The subset of `/info` this service uses. Declared locally rather than leaning on the
@@ -38,6 +45,10 @@ function buildOptions(): Docker.DockerOptions {
     return { ...base, socketPath: Config.docker.socketPath };
   }
 
+  if (host.startsWith(NPIPE_PREFIX)) {
+    return { ...base, socketPath: host.slice(NPIPE_PREFIX.length) };
+  }
+
   try {
     const url = new URL(host);
     if (url.protocol === UNIX_SCHEME) {
@@ -58,7 +69,19 @@ function buildOptions(): Docker.DockerOptions {
   return { ...base, socketPath: host };
 }
 
-const docker = new Docker(buildOptions());
+const options = buildOptions();
+const docker = new Docker(options);
+
+/**
+ * Where we are actually trying to reach the daemon, phrased for a human.
+ *
+ * Carried into the 503 body because "the daemon is unreachable" and "you are pointed at
+ * the wrong endpoint for this OS" produce identical symptoms otherwise, and only the
+ * second one is fixed by editing a config file.
+ */
+const endpointDescription = options.socketPath
+  ? `socket ${options.socketPath}`
+  : `${options.protocol ?? 'http'}://${options.host}:${options.port}`;
 
 function readDockerError(error: unknown): DockerodeError {
   return (error ?? {}) as DockerodeError;
@@ -85,7 +108,8 @@ export const DockerClient = Object.freeze({
 
     if (syscall && UNREACHABLE_SYSCALL_CODES.includes(syscall)) {
       return ApiErrors.dockerUnavailable(
-        `${syscall} while ${context}. Check that the daemon is running and that this user can access the socket.`,
+        `${syscall} while ${context}. Tried ${endpointDescription}. Check that the daemon is` +
+          ' running and reachable by this user, or set DOCKER_HOST to point somewhere else.',
         error,
       );
     }
