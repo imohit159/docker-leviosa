@@ -1,0 +1,72 @@
+import type { AuditAction } from '../config/index.config.js';
+import { Table } from '../config/index.config.js';
+import { Clock, Logger } from '../utils/index.utils.js';
+import { SqliteClient } from './sqlite.client.js';
+
+const log = Logger.for('store:audit');
+
+export interface AuditEvent {
+  id: number;
+  action: AuditAction;
+  volumeName: string | null;
+  payload: Record<string, unknown>;
+  createdAtMs: number;
+}
+
+interface AuditRow {
+  id: number;
+  action: string;
+  volume_name: string | null;
+  payload: string | null;
+  created_at: number;
+}
+
+/**
+ * Append-only trail of consequential actions. A tool that can delete 48 GB of
+ * someone's data owes them a record of who told it to, and it is also the only way to
+ * explain after the fact why a volume is gone.
+ */
+export const AuditRepository = Object.freeze({
+  record(action: AuditAction, volumeName: string | null, payload: Record<string, unknown> = {}): void {
+    try {
+      SqliteClient.execute(
+        `INSERT INTO ${Table.AUDIT} (action, volume_name, payload, created_at) VALUES (?, ?, ?, ?)`,
+        action,
+        volumeName,
+        JSON.stringify(payload),
+        Clock.nowMs(),
+      );
+    } catch (error) {
+      // Auditing must never be the reason a user-facing action fails.
+      log.warn({ err: error, action, volumeName }, 'failed to write audit event');
+    }
+  },
+
+  recent(limit: number): AuditEvent[] {
+    const rows = SqliteClient.select<AuditRow>(
+      `SELECT id, action, volume_name, payload, created_at
+       FROM ${Table.AUDIT} ORDER BY created_at DESC LIMIT ?`,
+      limit,
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      action: row.action as AuditAction,
+      volumeName: row.volume_name,
+      payload: _parsePayload(row.payload),
+      createdAtMs: row.created_at,
+    }));
+  },
+});
+
+function _parsePayload(json: string | null): Record<string, unknown> {
+  if (!json) {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}

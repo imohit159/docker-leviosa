@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+/**
+ * Semantic design tokens. Components reference roles (`bg-surface`, `text-muted`)
+ * rather than raw palette values, so the whole theme is one edit away and a component
+ * never hardcodes a hex.
+ */
+@theme {
+  --color-canvas: #08090d;
+  --color-surface: #0f1117;
+  --color-surface-raised: #161923;
+  --color-surface-hover: #1b1f2b;
+  --color-border-subtle: #21252f;
+  --color-border-strong: #2f3542;
+
+  --color-content: #e8eaf0;
+  --color-content-muted: #949cb0;
+  --color-content-faint: #646b7d;
+
+  --color-accent: #5b8cff;
+  --color-accent-soft: #1a2540;
+
+  --color-ok: #35c98b;
+  --color-ok-soft: #0e2a20;
+  --color-warn: #e8b339;
+  --color-warn-soft: #2c2210;
+  --color-danger: #f2637d;
+  --color-danger-soft: #2e1219;
+
+  --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Menlo', monospace;
+}
+
+html,
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-content);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures keep size columns aligned when values change during polling. */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background-color: var(--color-accent-soft);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Dark, thin scrollbars: this is a dense data tool, not a document. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}

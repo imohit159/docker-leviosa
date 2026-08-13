@@ -1,0 +1,27 @@
+{
+  "name": "@leviosa/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Transport contracts shared by the Express API and the Next.js client.",
+  "main": "./dist/index.shared.js",
+  "types": "./dist/index.shared.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.shared.d.ts",
+      "import": "./dist/index.shared.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
