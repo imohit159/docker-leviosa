@@ -7,25 +7,17 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "workspaces": [
-    "shared",
-    "backend",
-    "frontend"
-  ],
+  "packageManager": "pnpm@11.5.2",
   "scripts": {
-    "//dev": "Contracts are compiled once up front, then both apps start with their own pre-hooks skipped so two tsc processes cannot write shared/dist at the same time.",
-    "dev": "npm run build:shared && run-p dev:backend dev:frontend",
-    "dev:backend": "npm run dev --workspace @leviosa/backend --ignore-scripts",
-    "dev:frontend": "npm run dev --workspace @leviosa/frontend --ignore-scripts",
-    "build:shared": "npm run build --workspace @leviosa/shared",
-    "build": "npm run build:shared && npm run build --workspace @leviosa/backend --ignore-scripts && npm run build --workspace @leviosa/frontend --ignore-scripts",
-    "start": "run-p start:backend start:frontend",
-    "start:backend": "npm run start --workspace @leviosa/backend",
-    "start:frontend": "npm run start --workspace @leviosa/frontend",
-    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
-    "clean": "rm -rf shared/dist backend/dist frontend/.next"
-  },
-  "devDependencies": {
-    "npm-run-all": "^4.1.5"
+    "preinstall": "node scripts/ensure-pnpm.mjs",
+    "//workspaces": "Package membership lives in pnpm-workspace.yaml, not here: pnpm ignores the `workspaces` field, and keeping both invites the two from drifting apart.",
+    "//dev": "Contracts are compiled once before anything imports them, then all three packages watch in parallel so a change to a shared type reaches both apps without a restart.",
+    "dev": "pnpm run build:shared && pnpm -r --parallel run dev",
+    "build:shared": "pnpm --filter @leviosa/shared run build",
+    "//build": "`-r` walks the workspace in dependency order, so shared is built before the two packages that import it. No manual sequencing needed.",
+    "build": "pnpm -r run build",
+    "start": "pnpm -r --parallel run start",
+    "typecheck": "pnpm run build:shared && pnpm -r run typecheck",
+    "clean": "node scripts/clean.mjs"
   }
 }

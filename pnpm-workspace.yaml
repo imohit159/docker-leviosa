@@ -1,0 +1,29 @@
+# pnpm does not read the `workspaces` field from package.json — this file is the only
+# thing that makes it treat the repo as a monorepo. Without it pnpm installs the root
+# package alone, every workspace package is left with no node_modules, and the first
+# script that shells out to `tsc` dies with MODULE_NOT_FOUND pointing at a *global*
+# install path, which is a genuinely confusing thing to debug.
+packages:
+  - shared
+  - backend
+  - frontend
+
+# Dependency install scripts are opt-in per package, and pnpm fails the install while
+# any are left undecided. That is the right default — an unreviewed postinstall is
+# arbitrary code execution — so each one is triaged here.
+#
+#   esbuild      true  — resolves and verifies its platform binary. tsx (backend dev)
+#                        and tsup (backend build) both shell out to it.
+#
+#   ssh2         false — arrives under dockerode's SSH transport, which this project
+#   cpu-features false   never uses; it talks to the local Docker socket. Both compile
+#                        through node-gyp, so enabling them would make a working MSVC
+#                        toolchain a prerequisite for `pnpm install` on Windows. ssh2
+#                        falls back to pure-JS crypto, so skipping costs nothing.
+#
+#   protobufjs   false — its postinstall only generates optional CLI type stubs.
+allowBuilds:
+  esbuild: true
+  cpu-features: false
+  protobufjs: false
+  ssh2: false

@@ -6,14 +6,13 @@
   "description": "Express API that turns the Docker Engine API into volume insight.",
   "main": "dist/server.js",
   "scripts": {
-    "predev": "npm run build --workspace @leviosa/shared",
     "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
-    "prebuild": "npm run build --workspace @leviosa/shared",
     "build": "tsup",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@leviosa/shared": "workspace:*",
     "cors": "^2.8.6",
     "dockerode": "^5.0.1",
     "express": "^5.2.1",
