@@ -1,58 +1,256 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
 
 /**
- * Semantic design tokens. Components reference roles (`bg-surface`, `text-muted`)
- * rather than raw palette values, so the whole theme is one edit away and a component
- * never hardcodes a hex.
+ * Two-tier token system.
+ *
+ * Tier 1 is the shadcn/Unlumen interop contract (`--background`, `--muted`, `--ring`…).
+ * Every registry component we install speaks it, so it must exist verbatim or those
+ * components render unstyled. We retune its *values*, never its *names*.
+ *
+ * Tier 2 is the Leviosa domain layer (`--ok`, `--warn`, `--danger`, `--brand`, surface
+ * elevation). It encodes what this product means — "safe to delete", "measuring",
+ * "orphaned" — which no generic library can name for us.
+ *
+ * Both tiers are declared per colour scheme below and exposed to Tailwind here. Note
+ * `--accent` keeps its shadcn meaning (a hover surface); the blue that used to be
+ * called `accent` is now `--brand`, because two things called accent is how the
+ * previous cascade collision happened.
  */
-@theme {
-  --color-canvas: #08090d;
-  --color-surface: #0f1117;
-  --color-surface-raised: #161923;
-  --color-surface-hover: #1b1f2b;
-  --color-border-subtle: #21252f;
-  --color-border-strong: #2f3542;
+@theme inline {
+  /* Set on <html> by the self-hosted `geist` package in layout.tsx. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --font-heading: var(--font-sans);
 
-  --color-content: #e8eaf0;
-  --color-content-muted: #949cb0;
-  --color-content-faint: #646b7d;
+  /* Tier 1 — shadcn interop contract. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
-  --color-accent: #5b8cff;
-  --color-accent-soft: #1a2540;
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 
-  --color-ok: #35c98b;
-  --color-ok-soft: #0e2a20;
-  --color-warn: #e8b339;
-  --color-warn-soft: #2c2210;
-  --color-danger: #f2637d;
-  --color-danger-soft: #2e1219;
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 
-  --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Menlo', monospace;
+  /* Tier 2 — Leviosa domain semantics. Hue only ever carries status meaning. */
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-line: var(--brand-line);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-line: var(--ok-line);
+
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+
+  /* Surface elevation ramp. Depth is one step at a time, never a drop shadow. */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-html,
-body {
-  background-color: var(--color-canvas);
-  color: var(--color-content);
-  -webkit-font-smoothing: antialiased;
+/* Light: cool neutrals, never pure white — long dashboard sessions, less glare. */
+:root {
+  --radius: 0.5rem;
+
+  --background: #fbfcfd;
+  --foreground: #10131a;
+  --card: #ffffff;
+  --card-foreground: #10131a;
+  --popover: #ffffff;
+  --popover-foreground: #10131a;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f3f7;
+  --secondary-foreground: #10131a;
+  --muted: #f1f3f7;
+  --muted-foreground: #5b6478;
+  --accent: #eef1f6;
+  --accent-foreground: #10131a;
+  --destructive: #d92b4b;
+  --destructive-foreground: #ffffff;
+  --border: #e3e7ee;
+  --input: #d5dbe5;
+  --ring: #2563eb;
+
+  --surface: #ffffff;
+  --surface-raised: #f7f9fb;
+  --surface-hover: #eef1f6;
+
+  --brand: #2563eb;
+  --brand-soft: #e8efff;
+  --brand-line: #bcd0fb;
+
+  --ok: #0f9d63;
+  --ok-soft: #e4f7ef;
+  --ok-line: #a9e3c9;
+
+  --warn: #b57d0a;
+  --warn-soft: #fdf3dc;
+  --warn-line: #eed69a;
+
+  --danger: #d92b4b;
+  --danger-soft: #fdeaee;
+  --danger-line: #f5bcc7;
+
+  --chart-1: #2563eb;
+  --chart-2: #0f9d63;
+  --chart-3: #b57d0a;
+  --chart-4: #7c5cf0;
+  --chart-5: #0e8f9e;
+
+  --sidebar: #f7f9fb;
+  --sidebar-foreground: #10131a;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef1f6;
+  --sidebar-accent-foreground: #10131a;
+  --sidebar-border: #e3e7ee;
+  --sidebar-ring: #2563eb;
 }
 
-/* Tabular figures keep size columns aligned when values change during polling. */
-.numeric {
-  font-variant-numeric: tabular-nums;
+/* Dark is the default shipping theme: this tool lives next to a terminal. */
+.dark {
+  --background: #08090d;
+  --foreground: #e8eaf0;
+  --card: #0f1117;
+  --card-foreground: #e8eaf0;
+  --popover: #12151d;
+  --popover-foreground: #e8eaf0;
+  --primary: #5b8cff;
+  --primary-foreground: #0a1020;
+  --secondary: #161923;
+  --secondary-foreground: #e8eaf0;
+  --muted: #161923;
+  --muted-foreground: #949cb0;
+  --accent: #1b1f2b;
+  --accent-foreground: #e8eaf0;
+  --destructive: #f2637d;
+  --destructive-foreground: #2e1219;
+  --border: #21252f;
+  --input: #2f3542;
+  --ring: #5b8cff;
+
+  --surface: #0f1117;
+  --surface-raised: #161923;
+  --surface-hover: #1b1f2b;
+
+  --brand: #5b8cff;
+  --brand-soft: #16213b;
+  --brand-line: #2c3f6b;
+
+  --ok: #35c98b;
+  --ok-soft: #0e2a20;
+  --ok-line: #1c5340;
+
+  --warn: #e8b339;
+  --warn-soft: #2c2210;
+  --warn-line: #5a4519;
+
+  --danger: #f2637d;
+  --danger-soft: #2e1219;
+  --danger-line: #6b2334;
+
+  --chart-1: #5b8cff;
+  --chart-2: #35c98b;
+  --chart-3: #e8b339;
+  --chart-4: #a78bfa;
+  --chart-5: #38bdf8;
+
+  --sidebar: #0b0d12;
+  --sidebar-foreground: #e8eaf0;
+  --sidebar-primary: #5b8cff;
+  --sidebar-primary-foreground: #0a1020;
+  --sidebar-accent: #161923;
+  --sidebar-accent-foreground: #e8eaf0;
+  --sidebar-border: #1a1e28;
+  --sidebar-ring: #5b8cff;
 }
 
-::selection {
-  background-color: var(--color-accent-soft);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Identifiers — volume names, mount paths, drivers — are read character by
+     character, so they get tabular mono and never the prose face. */
+  .identifier {
+    @apply font-mono tracking-tight;
+    font-variant-ligatures: none;
+  }
+
+  /* Size and count columns must not reflow while values change during polling. */
+  .numeric {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-brand-soft text-foreground;
+  }
+
+  /* Thin scrollbars: this is a dense instrument, not a document. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--input) transparent;
+  }
 }
 
-*:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* Dark, thin scrollbars: this is a dense data tool, not a document. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
+@utility grid-noise {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 32px 32px;
 }

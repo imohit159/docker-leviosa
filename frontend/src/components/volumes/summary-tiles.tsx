@@ -1,50 +1,58 @@
 'use client';
 
-import { ByteFormat, CountFormat } from '@leviosa/shared';
+import { Activity, Database, HardDrive, Sparkles } from 'lucide-react';
 import type { SystemSummary } from '@leviosa/shared';
 import { StatTile } from '@/components/ui/stat-tile';
+import { ByteMetric, CountMetric } from '@/components/ui/metric';
 
 /**
- * Dashboard headline figures.
+ * The four numbers that decide whether anything else on this page is worth reading.
  *
- * Every total says how complete it is. An unmeasured volume contributes zero bytes, so
- * quoting "measured space" without also quoting how many volumes were never scanned
- * would understate the real footprint — and the reclaimable figure is the one people act
- * on destructively.
+ * "Measured" is shown next to "Total" rather than folded into it because a size total
+ * built from partial coverage is a lie of omission — the gap between the two is the
+ * honest error bar on every other figure here.
  */
 export function SummaryTiles({ summary }: { summary: SystemSummary }) {
-  const measured = ByteFormat.split(summary.measuredBytes);
-  const reclaimable = ByteFormat.split(summary.reclaimableBytes);
-  const scanning = summary.queue.running + summary.queue.queued;
-
-  const completeness =
-    summary.unmeasuredCount === 0
-      ? 'All volumes measured'
-      : `${CountFormat.humanize(summary.unmeasuredCount)} not yet measured`;
+  const measuredCount = summary.volumeCount - summary.unmeasuredCount;
+  const isScanning = summary.queue.running > 0 || summary.queue.queued > 0;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <StatTile
         label="Volumes"
-        value={CountFormat.humanize(summary.volumeCount)}
-        hint={`${CountFormat.humanize(summary.inUseCount)} in use · ${CountFormat.humanize(summary.reservedCount)} reserved`}
+        icon={<Database className="size-3.5" aria-hidden />}
+        value={<CountMetric value={summary.volumeCount} />}
+        hint={`${summary.inUseCount} in use · ${summary.reservedCount} reserved`}
       />
-      <StatTile label="Measured space" value={measured.value} unit={measured.unit} hint={completeness} />
+
+      <StatTile
+        label="Measured size"
+        icon={<HardDrive className="size-3.5" aria-hidden />}
+        value={<ByteMetric bytes={summary.measuredBytes} />}
+        hint={
+          summary.unmeasuredCount > 0
+            ? `${measuredCount} of ${summary.volumeCount} volumes measured`
+            : 'All volumes measured'
+        }
+      />
+
+      <StatTile
+        label="Orphaned"
+        icon={<Sparkles className="size-3.5" aria-hidden />}
+        tone={summary.orphanedCount > 0 ? 'warn' : 'neutral'}
+        value={<CountMetric value={summary.orphanedCount} />}
+        hint="No container references these"
+      />
+
       <StatTile
         label="Reclaimable"
-        value={reclaimable.value}
-        unit={reclaimable.unit}
-        tone={summary.reclaimableBytes > 0 ? 'warn' : 'neutral'}
-        hint={`Held by ${CountFormat.humanize(summary.orphanedCount)} orphaned volume${summary.orphanedCount === 1 ? '' : 's'}`}
-      />
-      <StatTile
-        label="Orphans"
-        value={CountFormat.humanize(summary.orphanedCount)}
-        tone={summary.orphanedCount > 0 ? 'danger' : 'ok'}
+        icon={<Activity className="size-3.5" aria-hidden />}
+        tone={summary.reclaimableBytes > 0 ? 'ok' : 'neutral'}
+        value={<ByteMetric bytes={summary.reclaimableBytes} />}
         hint={
-          scanning > 0
-            ? `${CountFormat.humanize(scanning)} scan${scanning === 1 ? '' : 's'} in progress`
-            : 'No container references them'
+          isScanning
+            ? `Measuring — ${summary.queue.running} running, ${summary.queue.queued} queued`
+            : 'Cached bytes held by orphans'
         }
       />
     </div>

@@ -1,5 +1,95 @@
 import { DeleteVerdict, MeasurementFreshness, ScanSource, VolumeUsage } from '@leviosa/shared';
 
+/**
+ * Dark ships as the default: this tool sits next to a terminal, and the status hues
+ * were tuned against a near-black canvas first. `enableSystem` still honours the OS.
+ */
+export const ThemeConfig = Object.freeze({
+  DEFAULT: 'dark',
+} as const);
+
+/**
+ * Motion presets. Centralised for the same reason colours are: a spring tuned in one
+ * component and eyeballed in the next is how an interface starts to feel unowned.
+ * Durations stay under 300ms — this is an instrument, and lag reads as latency.
+ */
+export const Motion = Object.freeze({
+  /** Layout/position changes: active indicators, reordering rows. */
+  SPRING: { type: 'spring', stiffness: 380, damping: 32, mass: 0.7 },
+  /** Enter/exit of small chrome. */
+  FADE_MS: 0.16,
+  /** Per-digit value transitions during polling. */
+  DIGIT_MS: 0.28,
+  /** Tooltips hold overflow detail, so they open near-instantly rather than on dwell. */
+  TOOLTIP_DELAY_MS: 200,
+} as const);
+
+/** URL is the source of truth for filter state, so the param names are shared. */
+export const SearchParam = Object.freeze({
+  USAGE: 'usage',
+  SEARCH: 'q',
+  SORT: 'sort',
+  ORDER: 'order',
+  PROJECT: 'project',
+  OFFSET: 'offset',
+} as const);
+
+/** Keystrokes are cheap, daemon round-trips are not. */
+export const SEARCH_DEBOUNCE_MS = 250;
+
+/**
+ * Primary navigation. The scopes *are* the workflow — "show me what I can reclaim" is
+ * one click, not a filter dropdown — and each one is a real URL so it survives a
+ * refresh, a back button and a paste into Slack.
+ */
+export const VolumeScope = Object.freeze([
+  { id: 'all', label: 'All volumes', usage: null, hint: 'Everything on this daemon' },
+  {
+    id: 'in-use',
+    label: 'In use',
+    usage: VolumeUsage.IN_USE,
+    hint: 'Held open by a running container',
+  },
+  {
+    id: 'reserved',
+    label: 'Reserved',
+    usage: VolumeUsage.RESERVED,
+    hint: 'Claimed by a stopped container',
+  },
+  {
+    id: 'orphaned',
+    label: 'Orphans',
+    usage: VolumeUsage.ORPHANED,
+    hint: 'Nothing references these',
+  },
+] as const);
+
+export type VolumeScopeId = (typeof VolumeScope)[number]['id'];
+
+/**
+ * Tone per usage class, so a component picks a meaning and never a colour.
+ *
+ * Orphans are brand-toned, not danger-toned. In this product an orphan is the win — the
+ * space you are allowed to take back — while `danger` is spent on destructive actions
+ * and an unreachable daemon. Reserved gets the warning, because that is the genuinely
+ * awkward state: nothing is using the volume, and Docker still will not let it go.
+ */
+export const UsageTone = Object.freeze({
+  [VolumeUsage.IN_USE]: 'ok',
+  [VolumeUsage.RESERVED]: 'warn',
+  [VolumeUsage.ORPHANED]: 'brand',
+} as const);
+
+/** Trailing windows offered by the growth panel. */
+export const GROWTH_WINDOWS = Object.freeze([
+  { days: 7, label: '7d' },
+  { days: 30, label: '30d' },
+  { days: 90, label: '90d' },
+] as const);
+
+/** Skeleton rows rendered while the first inventory page is in flight. */
+export const SKELETON_ROW_COUNT = 8;
+
 /** Polling cadences. Deliberately slow: nothing here changes second to second. */
 export const PollInterval = Object.freeze({
   /** While a scan job is in flight. */
@@ -56,6 +146,15 @@ export const SORT_OPTIONS = Object.freeze([
   { value: 'createdAt', label: 'Created' },
   { value: 'lastWriteAt', label: 'Last write' },
 ] as const);
+
+/**
+ * Value-to-label lookup derived from `SORT_OPTIONS`, so the select trigger can render
+ * "Size" while the URL and the API keep the wire value `size`. Derived rather than
+ * hand-written: a second literal list is a second thing to forget to update.
+ */
+export const SORT_LABELS: Record<string, string> = Object.freeze(
+  Object.fromEntries(SORT_OPTIONS.map((option) => [option.value, option.label])),
+);
 
 /** Bars in the composition breakdown, capped so the chart stays legible. */
 export const BREAKDOWN_LIMIT = 8;

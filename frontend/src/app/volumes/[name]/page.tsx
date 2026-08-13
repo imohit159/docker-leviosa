@@ -9,13 +9,15 @@ import { ScanSourceCopy } from '@/lib/constants';
 import { useScan, useVolumeDetail } from '@/hooks/index.hooks';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { ErrorState, LoadingState } from '@/components/ui/states';
+import { ErrorState } from '@/components/ui/states';
 import { Composition } from '@/components/detail/composition';
 import { ConsumerList } from '@/components/detail/consumer-list';
 import { EntryBrowser } from '@/components/detail/entry-browser';
 import { GrowthChart } from '@/components/detail/growth-chart';
 import { SafetyPanel } from '@/components/detail/safety-panel';
 import { UsageBadge } from '@/components/volumes/usage-badge';
+import { CopyButton } from '@/components/unlumen-ui/copy';
+import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
 
 /** Key facts pulled straight from the daemon, presented as a definition list. */
 function Facts({ volume }: { volume: VolumeDetail }) {
@@ -29,7 +31,11 @@ function Facts({ volume }: { volume: VolumeDetail }) {
         ? `${CountFormat.humanize(volume.size.fileCount)} files · ${CountFormat.humanize(volume.size.directoryCount)} directories`
         : '—',
     },
-    { label: 'Created', value: TimeFormat.relative(volume.createdAt), title: TimeFormat.absolute(volume.createdAt) },
+    {
+      label: 'Created',
+      value: TimeFormat.relative(volume.createdAt),
+      title: TimeFormat.absolute(volume.createdAt),
+    },
     {
       label: 'Last write',
       value: TimeFormat.relative(volume.size?.lastWriteAt),
@@ -40,19 +46,34 @@ function Facts({ volume }: { volume: VolumeDetail }) {
   ];
 
   return (
-    <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+    <dl className="grid grid-cols-1 gap-x-8 gap-y-2.5">
       {rows.map((row) => (
         <div key={row.label} className="flex justify-between gap-4 text-xs">
-          <dt className="shrink-0 text-content-faint">{row.label}</dt>
+          <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
           <dd
             title={row.title}
-            className={`min-w-0 truncate text-right text-content-muted ${row.mono ? 'font-mono' : 'numeric'}`}
+            className={`min-w-0 truncate text-right text-foreground ${row.mono ? 'identifier' : 'numeric'}`}
           >
             {row.value}
           </dd>
         </div>
       ))}
     </dl>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="flex flex-col gap-5 pt-6">
+      <ShimmerSkeleton className="h-3 w-24" />
+      <ShimmerSkeleton className="h-7 w-72" />
+      <ShimmerSkeleton className="h-24 w-full" rounded="lg" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <ShimmerSkeleton key={index} className="h-52 w-full" rounded="lg" />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -64,12 +85,12 @@ export default function VolumeDetailPage({ params }: { params: Promise<{ name: s
   const scan = useScan(name);
 
   if (detail.isPending) {
-    return <LoadingState label="Loading volume" />;
+    return <DetailSkeleton />;
   }
 
   if (detail.isError) {
     return (
-      <div className="pt-8">
+      <div className="pt-6">
         <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
       </div>
     );
@@ -81,39 +102,58 @@ export default function VolumeDetailPage({ params }: { params: Promise<{ name: s
     : 'This volume has never been measured.';
 
   return (
-    <div className="flex flex-col gap-5 pt-8">
+    <div className="flex flex-col gap-5 pt-6">
       <Link
         href="/"
-        className="inline-flex w-fit items-center gap-1.5 text-xs text-content-faint transition-colors hover:text-content"
+        className="group inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft className="size-3.5" aria-hidden />
+        <ArrowLeft
+          className="size-3.5 transition-transform group-hover:-translate-x-0.5"
+          aria-hidden
+        />
         All volumes
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate font-mono text-lg font-semibold tracking-tight">{volume.name}</h1>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h1 className="identifier truncate text-lg font-semibold tracking-tight">
+              {volume.name}
+            </h1>
+            <CopyButton
+              content={volume.name}
+              variant="ghost"
+              size="xs"
+              aria-label="Copy volume name"
+              className="shrink-0 text-muted-foreground"
+            />
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <UsageBadge usage={volume.usage} />
             {volume.composeProject ? (
-              <span className="text-xs text-content-faint">
-                compose project <span className="font-mono text-content-muted">{volume.composeProject}</span>
+              <span className="text-xs text-muted-foreground">
+                compose project{' '}
+                <span className="identifier text-foreground">{volume.composeProject}</span>
               </span>
             ) : null}
           </div>
         </div>
 
-        <Button variant="secondary" loading={scan.isRunning} onClick={scan.start}>
+        <Button variant="outline" loading={scan.isRunning} onClick={scan.start}>
           <RefreshCw className="size-3.5" aria-hidden />
           {scan.isRunning ? 'Measuring' : 'Re-measure'}
         </Button>
       </div>
 
-      {scan.error ? <p className="text-xs text-danger">{scan.error}</p> : null}
+      {scan.error ? (
+        <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-xs text-danger">
+          {scan.error}
+        </p>
+      ) : null}
 
       <SafetyPanel volume={volume} />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Overview" hint={measuredHint} />
           <CardBody>

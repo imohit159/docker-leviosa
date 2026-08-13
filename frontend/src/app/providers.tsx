@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
 import type { ReactNode } from 'react';
-import { QueryConfig } from '@/lib/constants';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { QueryConfig, ThemeConfig, Motion } from '@/lib/constants';
 
 /**
  * One QueryClient per browser session, created in state so React's strict-mode double
@@ -25,5 +27,21 @@ export function Providers({ children }: { children: ReactNode }) {
       }),
   );
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <ThemeProvider
+      attribute="class"
+      defaultTheme={ThemeConfig.DEFAULT}
+      enableSystem
+      // Colour transitions during a theme swap read as a rendering glitch on a page
+      // this dense; the View Transition circle wipe carries the change instead.
+      disableTransitionOnChange
+    >
+      <QueryClientProvider client={queryClient}>
+        {/* Tooltips carry the detail this UI strips out of the dense views (full mount
+            paths, scan provenance, absolute timestamps), so they need to appear fast
+            enough to feel like part of the same glance. */}
+        <TooltipProvider delay={Motion.TOOLTIP_DELAY_MS}>{children}</TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
 }

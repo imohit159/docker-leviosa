@@ -26,7 +26,17 @@ const csvFromEnv = z.string().transform((value) =>
     .filter((entry) => entry.length > 0),
 );
 
-const DEFAULT_CORS_ORIGINS: string[] = ['http://localhost:4200'];
+/**
+ * Both spellings of loopback are allowed by default.
+ *
+ * `localhost` and `127.0.0.1` are distinct origins to a browser, and the frontend ships
+ * with `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:4300`. Allowing only one of them means
+ * whichever spelling the developer types into the address bar decides whether the
+ * dashboard works, and the failure surfaces as an opaque network error rather than
+ * anything mentioning CORS. They are the same machine; there is no boundary here to
+ * defend by being strict.
+ */
+const DEFAULT_CORS_ORIGINS: string[] = ['http://localhost:4200', 'http://127.0.0.1:4200'];
 
 const envSchema = z.object({
   NODE_ENV: z.enum([NodeEnv.DEVELOPMENT, NodeEnv.PRODUCTION, NodeEnv.TEST]).default(NodeEnv.DEVELOPMENT),
