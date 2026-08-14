@@ -82,6 +82,8 @@ export interface VolumeUsageReport {
 
 /** Row shape for the volume collection. */
 export interface VolumeSummary {
+  /** Owning host. With `name`, this is the volume's full identity. */
+  hostId: string;
   name: string;
   driver: string;
   scope: string;
@@ -121,6 +123,7 @@ export interface VolumeDetail extends VolumeSummary {
 }
 
 export interface VolumeBrowseResult {
+  hostId: string;
   volumeName: string;
   path: string;
   parentPath: string | null;
@@ -130,6 +133,7 @@ export interface VolumeBrowseResult {
 }
 
 export interface VolumeDeleteResult {
+  hostId: string;
   name: string;
   deleted: boolean;
   reclaimedBytes: number | null;

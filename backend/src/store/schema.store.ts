@@ -1,14 +1,24 @@
-import { SCHEMA_VERSION, Table } from '../config/index.config.js';
+import { Table } from '../config/index.config.js';
+import { MigrationStore } from './migration.store.js';
 
 /**
- * Schema definition, applied idempotently at boot.
+ * The version 1 baseline, applied idempotently at boot.
+ *
+ * This is frozen history and must not be edited. Anything that changes the shape of an
+ * existing table belongs in `migration.store.ts`, because a `CREATE TABLE IF NOT
+ * EXISTS` is a no-op against a file that already has the table — editing a column here
+ * would alter fresh installs and silently skip every database that already has data.
+ *
+ * `SchemaStore.version` is the version the file should end up at after migrations run,
+ * not the version this DDL produces. It is derived from the migration list rather than
+ * hand-maintained, so adding a migration cannot leave a constant behind.
  *
  * Conventions: every timestamp is epoch millis stored as INTEGER, every boolean is
  * 0/1, and structured payloads are JSON text. There is no ORM by design — the query
  * surface is a handful of statements and an ORM would add more concepts than it removes.
  */
 export const SchemaStore = Object.freeze({
-  version: SCHEMA_VERSION,
+  version: MigrationStore.latestVersion(),
 
   statements(): readonly string[] {
     return Object.freeze([

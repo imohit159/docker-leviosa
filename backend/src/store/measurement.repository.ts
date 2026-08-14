@@ -8,6 +8,7 @@ import { SqliteClient } from './sqlite.client.js';
 const log = Logger.for('store:measurement');
 
 export interface StoredMeasurement {
+  hostId: string;
   volumeName: string;
   totalBytes: number;
   fileCount: number;
@@ -27,6 +28,7 @@ export interface StoredGrowthPoint {
 }
 
 interface MeasurementRow {
+  host_id: string;
   volume_name: string;
   total_bytes: number;
   file_count: number;
@@ -44,7 +46,7 @@ interface GrowthRow {
   total_bytes: number;
 }
 
-const SELECT_COLUMNS = `volume_name, total_bytes, file_count, directory_count, last_write_at,
+const SELECT_COLUMNS = `host_id, volume_name, total_bytes, file_count, directory_count, last_write_at,
   source, duration_ms, truncated, top_entries, captured_at`;
 
 function _parseEntries(json: string): RawEntry[] {
@@ -58,6 +60,7 @@ function _parseEntries(json: string): RawEntry[] {
 
 function _toStored(row: MeasurementRow): StoredMeasurement {
   return {
+    hostId: row.host_id,
     volumeName: row.volume_name,
     totalBytes: row.total_bytes,
     fileCount: row.file_count,
@@ -73,14 +76,20 @@ function _toStored(row: MeasurementRow): StoredMeasurement {
 
 export const MeasurementRepository = Object.freeze({
   /** Appends a measurement. Rows are never updated: the series is the feature. */
-  record(volumeName: string, measurement: RawMeasurement, entries: readonly RawEntry[]): StoredMeasurement {
+  record(
+    hostId: string,
+    volumeName: string,
+    measurement: RawMeasurement,
+    entries: readonly RawEntry[],
+  ): StoredMeasurement {
     const capturedAtMs = Clock.nowMs();
 
     SqliteClient.execute(
       `INSERT INTO ${Table.MEASUREMENT}
-        (volume_name, total_bytes, file_count, directory_count, last_write_at,
+        (host_id, volume_name, total_bytes, file_count, directory_count, last_write_at,
          source, duration_ms, truncated, top_entries, captured_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      hostId,
       volumeName,
       measurement.totalBytes,
       measurement.fileCount,
@@ -94,6 +103,7 @@ export const MeasurementRepository = Object.freeze({
     );
 
     return {
+      hostId,
       volumeName,
       totalBytes: measurement.totalBytes,
       fileCount: measurement.fileCount,
@@ -107,10 +117,11 @@ export const MeasurementRepository = Object.freeze({
     };
   },
 
-  latest(volumeName: string): StoredMeasurement | null {
+  latest(hostId: string, volumeName: string): StoredMeasurement | null {
     const row = SqliteClient.selectOne<MeasurementRow>(
       `SELECT ${SELECT_COLUMNS} FROM ${Table.MEASUREMENT}
-       WHERE volume_name = ? ORDER BY captured_at DESC LIMIT 1`,
+       WHERE host_id = ? AND volume_name = ? ORDER BY captured_at DESC LIMIT 1`,
+      hostId,
       volumeName,
     );
 
@@ -118,16 +129,19 @@ export const MeasurementRepository = Object.freeze({
   },
 
   /**
-   * Newest measurement for every volume in one query. The collection endpoint needs
-   * this for all rows at once; issuing one query per volume would be N+1 by design.
+   * Newest measurement for every volume on one host, in one query. The collection
+   * endpoint needs this for all rows at once; issuing one query per volume would be
+   * N+1 by design.
    */
-  latestForAll(): Map<string, StoredMeasurement> {
+  latestForAll(hostId: string): Map<string, StoredMeasurement> {
     const rows = SqliteClient.select<MeasurementRow>(
       `SELECT ${SELECT_COLUMNS} FROM ${Table.MEASUREMENT} m
-       WHERE m.captured_at = (
-         SELECT MAX(peer.captured_at) FROM ${Table.MEASUREMENT} peer
-         WHERE peer.volume_name = m.volume_name
-       )`,
+       WHERE m.host_id = ?
+         AND m.captured_at = (
+           SELECT MAX(peer.captured_at) FROM ${Table.MEASUREMENT} peer
+           WHERE peer.host_id = m.host_id AND peer.volume_name = m.volume_name
+         )`,
+      hostId,
     );
 
     const byVolume = new Map<string, StoredMeasurement>();
@@ -149,13 +163,14 @@ export const MeasurementRepository = Object.freeze({
    * `MAX(captured_at)`, which is exactly the point we want; on any other engine this
    * would need an explicit window function.
    */
-  series(volumeName: string, sinceMs: number, bucketMs: number): StoredGrowthPoint[] {
+  series(hostId: string, volumeName: string, sinceMs: number, bucketMs: number): StoredGrowthPoint[] {
     const rows = SqliteClient.select<GrowthRow>(
       `SELECT MAX(captured_at) AS captured_at, total_bytes
        FROM ${Table.MEASUREMENT}
-       WHERE volume_name = ? AND captured_at >= ?
+       WHERE host_id = ? AND volume_name = ? AND captured_at >= ?
        GROUP BY captured_at / ?
        ORDER BY captured_at ASC`,
+      hostId,
       volumeName,
       sinceMs,
       Math.max(1, Math.floor(bucketMs)),
@@ -164,11 +179,24 @@ export const MeasurementRepository = Object.freeze({
     return rows.map((row) => ({ capturedAtMs: row.captured_at, totalBytes: row.total_bytes }));
   },
 
-  forget(volumeName: string): void {
-    SqliteClient.execute(`DELETE FROM ${Table.MEASUREMENT} WHERE volume_name = ?`, volumeName);
+  forget(hostId: string, volumeName: string): void {
+    SqliteClient.execute(
+      `DELETE FROM ${Table.MEASUREMENT} WHERE host_id = ? AND volume_name = ?`,
+      hostId,
+      volumeName,
+    );
   },
 
-  /** Retention sweep. Keeps the newest row per volume even when it is older than the window. */
+  /** Drops a host's entire history when the host is deregistered. */
+  forgetHost(hostId: string): number {
+    return SqliteClient.execute(`DELETE FROM ${Table.MEASUREMENT} WHERE host_id = ?`, hostId);
+  },
+
+  /**
+   * Retention sweep across every host. Keeps the newest row per (host, volume) even
+   * when it is older than the window, so a dormant volume never loses its last known
+   * size.
+   */
   pruneOlderThan(cutoffMs: number): number {
     const removed = SqliteClient.execute(
       `DELETE FROM ${Table.MEASUREMENT}
@@ -177,7 +205,7 @@ export const MeasurementRepository = Object.freeze({
            SELECT id FROM ${Table.MEASUREMENT} m
            WHERE m.captured_at = (
              SELECT MAX(peer.captured_at) FROM ${Table.MEASUREMENT} peer
-             WHERE peer.volume_name = m.volume_name
+             WHERE peer.host_id = m.host_id AND peer.volume_name = m.volume_name
            )
          )`,
       cutoffMs,

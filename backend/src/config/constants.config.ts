@@ -119,9 +119,57 @@ export const Table = Object.freeze({
   SIGHTING: 'volume_sighting',
   AUDIT: 'audit_event',
   META: 'schema_meta',
+  HOST: 'docker_host',
 } as const);
 
-export const SCHEMA_VERSION = 1;
+/**
+ * Key under which the applied schema version is recorded in `Table.META`.
+ *
+ * There is deliberately no companion `SCHEMA_VERSION` constant. The target version is
+ * derived from the migration list, because a hand-maintained number can be bumped
+ * without a migration to match — which is exactly how a version 1 database once got
+ * stamped as version 2 and then skipped the migration that would have fixed it.
+ */
+export const SCHEMA_VERSION_KEY = 'schema_version';
+
+/**
+ * Reserved id for the daemon this process reaches directly, via socket or named pipe.
+ *
+ * Every pre-multi-host row is backfilled to this id, so it must never be reassigned:
+ * changing it would orphan the entire existing measurement history.
+ */
+export const LOCAL_HOST_ID = 'local';
+
+/** Default display name for the seeded local host; the operator can rename it. */
+export const LOCAL_HOST_LABEL = 'This machine';
+
+/**
+ * SSH transport settings.
+ *
+ * `dockerode` can take an `ssh://` host itself, but `docker-modem` builds a fresh
+ * `ssh2` connection per HTTP request and closes it when the response stream ends, so
+ * every Engine call would pay a full handshake. We supply our own pooled agent
+ * instead and drive these two remote entry points directly.
+ */
+export const SshTransport = Object.freeze({
+  DEFAULT_PORT: 22,
+  /**
+   * Preferred: the Engine's own stdio proxy. Needs the docker CLI on the remote and
+   * the login user in the `docker` group. Docker 18.09 and newer.
+   */
+  DIAL_STDIO_COMMAND: 'docker system dial-stdio',
+  /**
+   * Fallback: OpenSSH unix-socket forwarding straight to the daemon socket. Works
+   * without the docker CLI, so it covers minimal images the stdio proxy cannot.
+   */
+  REMOTE_SOCKET_PATH: '/var/run/docker.sock',
+  /** Local half of a forwarded unix socket. OpenSSH ignores it; ssh2 requires it. */
+  FORWARD_LOCAL_HOST: 'localhost',
+  FORWARD_LOCAL_PORT: 0,
+  /** Digest used when presenting an unknown host key to the operator. */
+  FINGERPRINT_ALGORITHM: 'sha256',
+  FINGERPRINT_PREFIX: 'SHA256:',
+} as const);
 
 /** Audit trail action names. */
 export const AuditAction = Object.freeze({
@@ -178,7 +226,26 @@ export const CacheKey = Object.freeze({
   VOLUME_INVENTORY: 'volume-inventory',
   DAEMON_INFO: 'daemon-info',
   SCAN_STRATEGY: 'scan-strategy',
+
+  /**
+   * Namespaces a key to one host. Mandatory for every cached daemon read: the bare
+   * keys above are process-global, so without this a second host would be served the
+   * first host's container and volume inventory until the TTL lapsed.
+   */
+  for(hostId: string, key: string): string {
+    return `${hostId}${CACHE_KEY_SEPARATOR}${key}`;
+  },
 } as const);
+
+const CACHE_KEY_SEPARATOR = '::';
+
+/**
+ * Composite identity for anything keyed per volume in memory.
+ *
+ * Volume names are unique per daemon, not globally, so `postgres_data` on two hosts is
+ * two different volumes. Every in-process map that used a bare name needs this.
+ */
+export const HOST_VOLUME_SEPARATOR = '/';
 
 /** Sub-directory of the daemon storage root that holds local volume data. */
 export const DOCKER_VOLUMES_DIRNAME = 'volumes';

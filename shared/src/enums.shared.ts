@@ -78,6 +78,45 @@ export const SortDirection = Object.freeze({
 } as const);
 export type SortDirection = (typeof SortDirection)[keyof typeof SortDirection];
 
+/** How Leviosa reaches a host's Engine API. */
+export const HostKind = Object.freeze({
+  /** The daemon this process talks to directly, over a unix socket or named pipe. */
+  LOCAL: 'local',
+  /** A remote daemon reached by tunnelling the Engine API over SSH. */
+  SSH: 'ssh',
+} as const);
+export type HostKind = (typeof HostKind)[keyof typeof HostKind];
+
+/** Current reachability of a registered host. */
+export const HostStatus = Object.freeze({
+  ONLINE: 'ONLINE',
+  /** Registered, enabled, but the daemon did not answer. */
+  OFFLINE: 'OFFLINE',
+  /** Excluded from sweeps and the host switcher by the operator. */
+  DISABLED: 'DISABLED',
+  /**
+   * Reachable, but the SSH host key does not match the pinned fingerprint. Treated as
+   * a refusal rather than a warning: a changed key is indistinguishable from a
+   * machine-in-the-middle, and this tool can delete data.
+   */
+  UNTRUSTED: 'UNTRUSTED',
+} as const);
+export type HostStatus = (typeof HostStatus)[keyof typeof HostStatus];
+
+/** Result of probing a host's connection, as reported by the test endpoint. */
+export const HostProbeOutcome = Object.freeze({
+  OK: 'OK',
+  /** Host key is unknown or has changed; the operator must confirm the fingerprint. */
+  FINGERPRINT_UNVERIFIED: 'FINGERPRINT_UNVERIFIED',
+  /** Reached the SSH server but the key or agent was rejected. */
+  AUTH_FAILED: 'AUTH_FAILED',
+  /** No SSH server answered at that address and port. */
+  SSH_UNREACHABLE: 'SSH_UNREACHABLE',
+  /** SSH works, but the Docker daemon behind it did not respond. */
+  DAEMON_UNREACHABLE: 'DAEMON_UNREACHABLE',
+} as const);
+export type HostProbeOutcome = (typeof HostProbeOutcome)[keyof typeof HostProbeOutcome];
+
 /** Container lifecycle states as reported by the Docker Engine API. */
 export const ContainerState = Object.freeze({
   CREATED: 'created',

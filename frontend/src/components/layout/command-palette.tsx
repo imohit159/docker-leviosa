@@ -7,7 +7,7 @@ import type { VolumeListQuery } from '@leviosa/shared';
 import { CommandMenu } from '@/components/unlumen-ui/command-menu';
 import type { CommandMenuGroupDef } from '@/components/unlumen-ui/command-menu';
 import { Route, SearchParam, VolumeScope } from '@/lib/constants';
-import { useVolumes } from '@/hooks/index.hooks';
+import { useHostId, useVolumes } from '@/hooks/index.hooks';
 
 const SCOPE_ICON = {
   all: Layers,
@@ -29,17 +29,21 @@ const PALETTE_QUERY: VolumeListQuery = {
 };
 
 export function CommandPalette() {
-  const { data } = useVolumes(PALETTE_QUERY);
+  // Scoped to the host on screen. A palette spanning every host would need a volume
+  // list per host on every keystroke, and would happily offer two identically named
+  // volumes with nothing to tell them apart.
+  const hostId = useHostId();
+  const { data } = useVolumes(hostId, PALETTE_QUERY);
 
   const groups = useMemo<CommandMenuGroupDef[]>(() => {
+    const dashboard = Route.dashboard(hostId);
+
     const scopeGroup: CommandMenuGroupDef = {
       heading: 'Go to',
       items: VolumeScope.map((scope) => ({
         label: scope.label,
         icon: SCOPE_ICON[scope.id],
-        href: scope.usage
-          ? `${Route.DASHBOARD}?${SearchParam.USAGE}=${scope.usage}`
-          : Route.DASHBOARD,
+        href: scope.usage ? `${dashboard}?${SearchParam.USAGE}=${scope.usage}` : dashboard,
         keywords: [scope.hint],
       })),
     };
@@ -48,7 +52,7 @@ export function CommandPalette() {
       // Size rides along in the label so the palette is a ranked list you can read,
       // not just a jump target.
       label: `${volume.name}  ·  ${ByteFormat.humanize(volume.size?.totalBytes ?? null)}`,
-      href: Route.volume(volume.name),
+      href: Route.volume(volume.hostId, volume.name),
       keywords: [
         volume.name,
         volume.composeProject ?? '',
@@ -60,7 +64,7 @@ export function CommandPalette() {
     return volumeItems.length > 0
       ? [scopeGroup, { heading: 'Volumes', items: volumeItems }]
       : [scopeGroup];
-  }, [data]);
+  }, [data, hostId]);
 
   return (
     <CommandMenu

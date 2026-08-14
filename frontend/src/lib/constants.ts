@@ -10,16 +10,27 @@ export const ThemeConfig = Object.freeze({
   DEFAULT: 'light',
 } as const);
 
+/** The daemon this process reaches directly. Mirrors the backend's reserved id. */
+export const LOCAL_HOST_ID = 'local';
+
 /**
  * Every internal path in one place. `/` is the marketing landing; the product lives
- * under `/volumes`, so "open the dashboard" and "read about the tool" are different
- * URLs that can evolve independently.
+ * under `/hosts/:hostId/volumes`, so "open the dashboard" and "read about the tool" are
+ * different URLs that can evolve independently.
+ *
+ * The host is a path segment rather than a stored preference, so a link to a volume
+ * carries the machine it lives on. A remembered "current host" would make the same URL
+ * mean different things for two people, which is exactly the wrong property for a tool
+ * whose links get pasted into chat next to a delete recommendation.
  */
 export const Route = Object.freeze({
   LANDING: '/',
-  DASHBOARD: '/volumes',
-  volume(name: string): string {
-    return `/volumes/${encodeURIComponent(name)}`;
+  SETTINGS: '/settings',
+  dashboard(hostId: string): string {
+    return `/hosts/${encodeURIComponent(hostId)}/volumes`;
+  },
+  volume(hostId: string, name: string): string {
+    return `/hosts/${encodeURIComponent(hostId)}/volumes/${encodeURIComponent(name)}`;
   },
 } as const);
 

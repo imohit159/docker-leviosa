@@ -11,15 +11,15 @@ import { QueryKey } from '@/lib/query-keys';
  * not synthesise it from the volume name, because the entire point of the token is that
  * a human typed it.
  */
-export function useDeleteVolume(onDeleted?: (result: VolumeDeleteResult) => void) {
+export function useDeleteVolume(hostId: string, onDeleted?: (result: VolumeDeleteResult) => void) {
   const queryClient = useQueryClient();
 
   return useMutation<VolumeDeleteResult, ApiRequestError, { name: string; confirm: string }>({
-    mutationFn: ({ name, confirm }) => VolumeApi.remove(name, confirm),
+    mutationFn: ({ name, confirm }) => VolumeApi.remove(hostId, name, confirm),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: QueryKey.allVolumes() });
-      void queryClient.invalidateQueries({ queryKey: QueryKey.systemSummary() });
-      queryClient.removeQueries({ queryKey: QueryKey.volume(result.name) });
+      void queryClient.invalidateQueries({ queryKey: QueryKey.allVolumes(hostId) });
+      void queryClient.invalidateQueries({ queryKey: QueryKey.systemSummary(hostId) });
+      queryClient.removeQueries({ queryKey: QueryKey.volume(hostId, result.name) });
       onDeleted?.(result);
     },
   });

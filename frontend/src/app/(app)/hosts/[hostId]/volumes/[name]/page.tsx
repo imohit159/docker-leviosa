@@ -6,7 +6,7 @@ import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { ByteFormat, CountFormat, TimeFormat } from '@leviosa/shared';
 import type { VolumeDetail } from '@leviosa/shared';
 import { Route, ScanSourceCopy } from '@/lib/constants';
-import { useScan, useVolumeDetail } from '@/hooks/index.hooks';
+import { useCurrentHost, useScan, useVolumeDetail } from '@/hooks/index.hooks';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
@@ -77,12 +77,18 @@ function DetailSkeleton() {
   );
 }
 
-export default function VolumeDetailPage({ params }: { params: Promise<{ name: string }> }) {
-  const { name: encodedName } = use(params);
+export default function VolumeDetailPage({
+  params,
+}: {
+  params: Promise<{ hostId: string; name: string }>;
+}) {
+  const { hostId: encodedHostId, name: encodedName } = use(params);
+  const hostId = decodeURIComponent(encodedHostId);
   const name = decodeURIComponent(encodedName);
 
-  const detail = useVolumeDetail(name);
-  const scan = useScan(name);
+  const host = useCurrentHost();
+  const detail = useVolumeDetail(hostId, name);
+  const scan = useScan(hostId, name);
 
   if (detail.isPending) {
     return <DetailSkeleton />;
@@ -104,14 +110,14 @@ export default function VolumeDetailPage({ params }: { params: Promise<{ name: s
   return (
     <div className="flex flex-col gap-5 pt-6">
       <Link
-        href={Route.DASHBOARD}
+        href={Route.dashboard(hostId)}
         className="group inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft
           className="size-3.5 transition-transform group-hover:-translate-x-0.5"
           aria-hidden
         />
-        All volumes
+        All volumes on {host?.label ?? hostId}
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">

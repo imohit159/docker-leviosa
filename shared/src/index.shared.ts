@@ -8,4 +8,5 @@ export type * from './api.types.js';
 export type * from './volume.types.js';
 export type * from './job.types.js';
 export type * from './system.types.js';
+export type * from './host.types.js';
 export type * from './query.types.js';

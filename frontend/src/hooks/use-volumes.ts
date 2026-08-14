@@ -11,10 +11,10 @@ import { QueryKey } from '@/lib/query-keys';
  * page descriptor always agree — paginating a locally-filtered copy is how "showing 1-50
  * of 12" bugs are born.
  */
-export function useVolumes(query: VolumeListQuery) {
+export function useVolumes(hostId: string, query: VolumeListQuery) {
   return useQuery<Paginated<VolumeSummary>>({
-    queryKey: QueryKey.volumes(query),
-    queryFn: () => VolumeApi.list(query),
+    queryKey: QueryKey.volumes(hostId, query),
+    queryFn: () => VolumeApi.list(hostId, query),
     refetchInterval: PollInterval.INVENTORY_MS,
     staleTime: QueryConfig.STALE_TIME_MS,
     retry: QueryConfig.RETRY_COUNT,

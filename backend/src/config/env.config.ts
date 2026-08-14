@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
 import { z } from 'zod';
 import { MillisIn } from '@leviosa/shared';
@@ -99,6 +100,33 @@ const envSchema = z.object({
 
   /** Destructive endpoints are opt-in: read-only by default. */
   ALLOW_VOLUME_DELETE: booleanFromEnv.default(true),
+
+  /**
+   * Host keys are verified against this file. Pointing it at a nonexistent path does
+   * not disable verification — an unknown key is refused either way, and must be
+   * confirmed explicitly through the host test endpoint before it is trusted.
+   */
+  SSH_KNOWN_HOSTS_PATH: z.string().min(1).default(join(homedir(), '.ssh', 'known_hosts')),
+  /**
+   * Set by the shell that started this process. Read here rather than at the point of
+   * use so the agent socket obeys the same "one place reads the environment" rule as
+   * everything else, and so its absence is visible in one place.
+   */
+  SSH_AUTH_SOCK: z.string().optional(),
+  /** Ceiling on the TCP connect plus handshake. Deliberately well under the Docker timeout. */
+  SSH_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(15 * MillisIn.SECOND),
+  /** Keepalive probe interval. Holds the pooled connection open through NAT idle timeouts. */
+  SSH_KEEPALIVE_MS: z.coerce.number().int().min(1_000).default(15 * MillisIn.SECOND),
+  /**
+   * After a connection failure a host is refused outright for this long.
+   *
+   * Without it, an unreachable VPS makes every dashboard request sit through the full
+   * Docker timeout before failing, so one dead host degrades the whole UI rather than
+   * just its own panel.
+   */
+  HOST_UNREACHABLE_BACKOFF_MS: z.coerce.number().int().min(1_000).default(30 * MillisIn.SECOND),
+  /** Simultaneous hosts touched by a background sweep. */
+  HOST_SWEEP_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(3),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -160,6 +188,18 @@ export const Config = Object.freeze({
     snapshotCron: env.SNAPSHOT_CRON,
     sightingIntervalMs: env.SIGHTING_INTERVAL_MS,
     sightingTrustAfterDays: env.SIGHTING_TRUST_AFTER_DAYS,
+  }),
+
+  ssh: Object.freeze({
+    knownHostsPath: env.SSH_KNOWN_HOSTS_PATH,
+    authSock: env.SSH_AUTH_SOCK ?? null,
+    connectTimeoutMs: env.SSH_CONNECT_TIMEOUT_MS,
+    keepaliveMs: env.SSH_KEEPALIVE_MS,
+  }),
+
+  hosts: Object.freeze({
+    unreachableBackoffMs: env.HOST_UNREACHABLE_BACKOFF_MS,
+    sweepConcurrency: env.HOST_SWEEP_CONCURRENCY,
   }),
 
   features: Object.freeze({

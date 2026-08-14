@@ -1,4 +1,5 @@
 import type { ScanSource } from '@leviosa/shared';
+import type { HostContext } from '../docker/index.docker.js';
 import type { RawEntry, RawListing, RawMeasurement } from '../types/internal.types.js';
 
 export interface MeasureOutcome {
@@ -8,6 +9,8 @@ export interface MeasureOutcome {
 }
 
 export interface StrategyTarget {
+  /** The daemon the volume lives on. Decides which strategies are even eligible. */
+  host: HostContext;
   volumeName: string;
   /** Daemon-side mountpoint. Only meaningful to the host filesystem strategy. */
   mountpoint: string;

@@ -1,12 +1,13 @@
 import { HttpStatus } from '../config/index.config.js';
+import { HostMiddleware } from '../middlewares/index.middlewares.js';
 import { SystemService } from '../services/index.services.js';
 import { ApiErrors, ApiResponse, AsyncHandler } from '../utils/index.utils.js';
 
 export const SystemController = Object.freeze({
-  /** GET /api/v1/system/summary — dashboard headline figures. */
-  summary: AsyncHandler.wrap(async (_req, res) => {
+  /** GET /api/v1/hosts/:hostId/system/summary — dashboard headline figures. */
+  summary: AsyncHandler.wrap(async (req, res) => {
     try {
-      return ApiResponse.ok(res, await SystemService.summary());
+      return ApiResponse.ok(res, await SystemService.summary(HostMiddleware.require(req)));
     } catch (error) {
       throw ApiErrors.wrapUnknown(error, 'building the system summary');
     }
@@ -15,8 +16,9 @@ export const SystemController = Object.freeze({
   /**
    * GET /api/v1/health
    *
-   * Answers 503 when the daemon is unreachable so container orchestrators and the
-   * client both treat a dead socket as unhealthy rather than as an empty volume list.
+   * Answers 503 only when no enabled host answered at all. One unreachable remote
+   * leaves this 200 with that host marked offline, because failing the whole endpoint
+   * would take the dashboard down for hosts that are working fine.
    */
   health: AsyncHandler.wrap(async (_req, res) => {
     try {

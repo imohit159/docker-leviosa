@@ -4,6 +4,8 @@ import type { SizeMeasurement } from './volume.types.js';
 /** A queued size measurement. Scans are IO-bound and can run for minutes. */
 export interface ScanJob {
   id: string;
+  /** Which daemon the volume lives on. Names are unique per host, not globally. */
+  hostId: string;
   volumeName: string;
   state: JobState;
   /** Position in the queue while QUEUED; null once it starts. */

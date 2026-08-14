@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { MillisIn, ScanSource } from '@leviosa/shared';
 import { CacheKey, Config, DOCKER_VOLUMES_DIRNAME } from '../config/index.config.js';
-import { DockerClient } from '../docker/index.docker.js';
+import type { HostContext } from '../docker/index.docker.js';
 import { Logger, TtlCache } from '../utils/index.utils.js';
 import type { RawListing, StrategyDecision } from '../types/internal.types.js';
 import { HostFsStrategy } from './host-fs.strategy.js';
@@ -20,7 +20,21 @@ const strategyCache = TtlCache.create<StrategyDecision>(STRATEGY_CACHE_MS);
  * Ordered by preference: the direct filesystem walk is cheaper when it is possible
  * at all, and the sidecar is the universal fallback.
  */
-const STRATEGIES: readonly ScanStrategy[] = Object.freeze([HostFsStrategy, SidecarStrategy]);
+const LOCAL_STRATEGIES: readonly ScanStrategy[] = Object.freeze([HostFsStrategy, SidecarStrategy]);
+
+/**
+ * Remote hosts get the sidecar and nothing else.
+ *
+ * `HostFsStrategy` is withheld structurally rather than left to its own `isUsable`
+ * check, so that a remote host cannot reach the local-filesystem path even if that
+ * check were later loosened. Two independent gates for a failure whose symptom is
+ * plausible-looking wrong numbers rather than an error.
+ */
+const REMOTE_STRATEGIES: readonly ScanStrategy[] = Object.freeze([SidecarStrategy]);
+
+function _strategiesFor(host: HostContext): readonly ScanStrategy[] {
+  return host.isLocal ? LOCAL_STRATEGIES : REMOTE_STRATEGIES;
+}
 
 /**
  * Facade over the measurement strategies. Callers never pick a backend; they hand
@@ -29,7 +43,7 @@ const STRATEGIES: readonly ScanStrategy[] = Object.freeze([HostFsStrategy, Sidec
  */
 export const ScannerService = Object.freeze({
   async resolveStrategy(target: StrategyTarget): Promise<ScanStrategy> {
-    for (const strategy of STRATEGIES) {
+    for (const strategy of _strategiesFor(target.host)) {
       if (await strategy.isUsable(target)) {
         return strategy;
       }
@@ -40,7 +54,10 @@ export const ScannerService = Object.freeze({
 
   async measure(target: StrategyTarget): Promise<MeasureOutcome> {
     const strategy = await ScannerService.resolveStrategy(target);
-    log.debug({ volume: target.volumeName, strategy: strategy.source }, 'measuring volume');
+    log.debug(
+      { volume: target.volumeName, hostId: target.host.hostId, strategy: strategy.source },
+      'measuring volume',
+    );
     return strategy.measure(target);
   },
 
@@ -53,8 +70,17 @@ export const ScannerService = Object.freeze({
    * Reports which strategy this host will use and why, so the UI can explain that
    * measurements run in a container rather than looking like an unexplained delay.
    */
-  async describeStrategy(): Promise<StrategyDecision> {
-    return strategyCache.resolve(CacheKey.SCAN_STRATEGY, async () => {
+  async describeStrategy(host: HostContext): Promise<StrategyDecision> {
+    return strategyCache.resolve(CacheKey.for(host.hostId, CacheKey.SCAN_STRATEGY), async () => {
+      if (!host.isLocal) {
+        return {
+          source: ScanSource.SIDECAR,
+          reason:
+            `${host.label} is reached over SSH, so volumes are measured inside a throwaway` +
+            ' container on that machine rather than read from this one.',
+        };
+      }
+
       if (!Config.scan.allowHostFs) {
         return {
           source: ScanSource.SIDECAR,
@@ -62,7 +88,7 @@ export const ScannerService = Object.freeze({
         };
       }
 
-      const info = await DockerClient.info();
+      const info = await host.info();
       const root = info?.DockerRootDir;
       if (!root) {
         return {

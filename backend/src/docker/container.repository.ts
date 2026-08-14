@@ -4,11 +4,16 @@ import type { ContainerState } from '@leviosa/shared';
 import { CacheKey, Config } from '../config/index.config.js';
 import { Identifier, TtlCache } from '../utils/index.utils.js';
 import type { ContainerRecord, ContainerVolumeMount } from '../types/internal.types.js';
-import { DockerClient } from './docker.client.js';
+import type { HostContext } from './host-context.js';
 
 const VOLUME_MOUNT_TYPE = 'volume';
 const NAME_PREFIX = '/';
 
+/**
+ * Shared across hosts, but every key is namespaced by host id. A bare
+ * `'container-inventory'` key would serve the first host's containers to every other
+ * host until the TTL lapsed, which reads as volumes mysteriously being "in use".
+ */
 const inventoryCache = TtlCache.create<ContainerRecord[]>(Config.docker.inventoryCacheMs);
 
 /** Docker prefixes every container name with a slash. */
@@ -67,18 +72,18 @@ export const ContainerRepository = Object.freeze({
    * volumes as far as Docker is concerned, so excluding them would report volumes
    * as orphaned that the daemon will refuse to remove.
    */
-  async listAll(): Promise<ContainerRecord[]> {
-    return inventoryCache.resolve(CacheKey.CONTAINER_INVENTORY, async () => {
+  async listAll(host: HostContext): Promise<ContainerRecord[]> {
+    return inventoryCache.resolve(CacheKey.for(host.hostId, CacheKey.CONTAINER_INVENTORY), async () => {
       try {
-        const infos = await DockerClient.raw().listContainers({ all: true });
+        const infos = await host.docker.listContainers({ all: true });
         return infos.map(_toRecord);
       } catch (error) {
-        throw DockerClient.toApiError(error, 'listing containers');
+        throw host.toApiError(error, 'listing containers');
       }
     });
   },
 
-  invalidate(): void {
-    inventoryCache.invalidate();
+  invalidate(host: HostContext): void {
+    inventoryCache.invalidate(CacheKey.for(host.hostId, CacheKey.CONTAINER_INVENTORY));
   },
 });

@@ -1,3 +1,4 @@
+export * from './use-hosts';
 export * from './use-volumes';
 export * from './use-volume-query';
 export * from './use-volume-detail';

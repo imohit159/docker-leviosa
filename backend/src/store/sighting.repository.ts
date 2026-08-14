@@ -3,6 +3,7 @@ import { Clock } from '../utils/index.utils.js';
 import { SqliteClient } from './sqlite.client.js';
 
 export interface StoredSighting {
+  hostId: string;
   volumeName: string;
   firstSeenAtMs: number;
   lastSeenAtMs: number;
@@ -19,6 +20,7 @@ export interface SightingObservation {
 }
 
 interface SightingRow {
+  host_id: string;
   volume_name: string;
   first_seen_at: number;
   last_seen_at: number;
@@ -26,7 +28,7 @@ interface SightingRow {
   last_consumers: string | null;
 }
 
-const SELECT_COLUMNS = 'volume_name, first_seen_at, last_seen_at, last_seen_attached_at, last_consumers';
+const SELECT_COLUMNS = 'host_id, volume_name, first_seen_at, last_seen_at, last_seen_attached_at, last_consumers';
 
 function _parseConsumers(json: string | null): string[] {
   if (!json) {
@@ -42,6 +44,7 @@ function _parseConsumers(json: string | null): string[] {
 
 function _toStored(row: SightingRow): StoredSighting {
   return {
+    hostId: row.host_id,
     volumeName: row.volume_name,
     firstSeenAtMs: row.first_seen_at,
     lastSeenAtMs: row.last_seen_at,
@@ -66,7 +69,7 @@ export const SightingRepository = Object.freeze({
    * Records one polling round for every volume currently on the daemon. Written in a
    * single transaction so a crash mid-sweep cannot leave a half-updated ledger.
    */
-  observe(observations: readonly SightingObservation[]): void {
+  observe(hostId: string, observations: readonly SightingObservation[]): void {
     if (observations.length === 0) {
       return;
     }
@@ -74,9 +77,9 @@ export const SightingRepository = Object.freeze({
     const now = Clock.nowMs();
     const upsert = SqliteClient.statement(
       `INSERT INTO ${Table.SIGHTING}
-        (volume_name, first_seen_at, last_seen_at, last_seen_attached_at, last_consumers)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (volume_name) DO UPDATE SET
+        (host_id, volume_name, first_seen_at, last_seen_at, last_seen_attached_at, last_consumers)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (host_id, volume_name) DO UPDATE SET
          last_seen_at = excluded.last_seen_at,
          -- Only advance the attachment marker when consumers were actually observed.
          last_seen_attached_at = COALESCE(excluded.last_seen_attached_at, ${Table.SIGHTING}.last_seen_attached_at),
@@ -87,6 +90,7 @@ export const SightingRepository = Object.freeze({
       for (const observation of observations) {
         const attached = observation.consumerNames.length > 0;
         upsert.run(
+          hostId,
           observation.volumeName,
           now,
           now,
@@ -97,30 +101,50 @@ export const SightingRepository = Object.freeze({
     });
   },
 
-  find(volumeName: string): StoredSighting | null {
+  find(hostId: string, volumeName: string): StoredSighting | null {
     const row = SqliteClient.selectOne<SightingRow>(
-      `SELECT ${SELECT_COLUMNS} FROM ${Table.SIGHTING} WHERE volume_name = ?`,
+      `SELECT ${SELECT_COLUMNS} FROM ${Table.SIGHTING} WHERE host_id = ? AND volume_name = ?`,
+      hostId,
       volumeName,
     );
 
     return row ? _toStored(row) : null;
   },
 
-  findAll(): Map<string, StoredSighting> {
-    const rows = SqliteClient.select<SightingRow>(`SELECT ${SELECT_COLUMNS} FROM ${Table.SIGHTING}`);
+  findAll(hostId: string): Map<string, StoredSighting> {
+    const rows = SqliteClient.select<SightingRow>(
+      `SELECT ${SELECT_COLUMNS} FROM ${Table.SIGHTING} WHERE host_id = ?`,
+      hostId,
+    );
     return new Map(rows.map((row) => [row.volume_name, _toStored(row)] as const));
   },
 
-  /** Oldest observation in the ledger: how far back our own knowledge reaches. */
-  trackingSinceMs(): number | null {
+  /**
+   * Oldest observation for this host: how far back our knowledge of it reaches.
+   *
+   * Per host rather than global, because a VPS added yesterday has one day of history
+   * no matter how long the local daemon has been watched, and reporting the global
+   * minimum would claim months of idle-time data this tool never collected.
+   */
+  trackingSinceMs(hostId: string): number | null {
     const row = SqliteClient.selectOne<{ first_seen_at: number | null }>(
-      `SELECT MIN(first_seen_at) AS first_seen_at FROM ${Table.SIGHTING}`,
+      `SELECT MIN(first_seen_at) AS first_seen_at FROM ${Table.SIGHTING} WHERE host_id = ?`,
+      hostId,
     );
 
     return row?.first_seen_at ?? null;
   },
 
-  forget(volumeName: string): void {
-    SqliteClient.execute(`DELETE FROM ${Table.SIGHTING} WHERE volume_name = ?`, volumeName);
+  forget(hostId: string, volumeName: string): void {
+    SqliteClient.execute(
+      `DELETE FROM ${Table.SIGHTING} WHERE host_id = ? AND volume_name = ?`,
+      hostId,
+      volumeName,
+    );
+  },
+
+  /** Drops a host's ledger when the host is deregistered. */
+  forgetHost(hostId: string): number {
+    return SqliteClient.execute(`DELETE FROM ${Table.SIGHTING} WHERE host_id = ?`, hostId);
   },
 });

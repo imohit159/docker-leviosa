@@ -5,3 +5,4 @@ export * from './measurement.mapper.js';
 export * from './volume.service.js';
 export * from './browse.service.js';
 export * from './system.service.js';
+export * from './host.service.js';

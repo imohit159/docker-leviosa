@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ChevronRight, CornerLeftUp, File, Folder, Link2 } from 'lucide-react';
 import { BrowseDefaults, ByteFormat, EntryKind, TimeFormat } from '@leviosa/shared';
 import type { VolumeEntry } from '@leviosa/shared';
-import { useVolumeEntries } from '@/hooks/index.hooks';
+import { useHostId, useVolumeEntries } from '@/hooks/index.hooks';
 import { EmptyState, ErrorState, TableSkeleton } from '@/components/ui/states';
 import { CopyButton } from '@/components/unlumen-ui/copy';
 import { RefreshButton } from '@/components/unlumen-ui/refresh';
@@ -83,8 +83,9 @@ function EntryRow({
  * directory on demand instead of walking the whole tree up front.
  */
 export function EntryBrowser({ volumeName }: { volumeName: string }) {
+  const hostId = useHostId();
   const [path, setPath] = useState<string>(BrowseDefaults.ROOT_PATH);
-  const query = useVolumeEntries(volumeName, path, true);
+  const query = useVolumeEntries(hostId, volumeName, path, true);
 
   const segments = path === BrowseDefaults.ROOT_PATH ? [] : path.split('/').filter(Boolean);
   const largestBytes = Math.max(...(query.data?.entries ?? []).map((e) => e.sizeBytes), 1);

@@ -6,7 +6,7 @@ import { ByteFormat } from '@leviosa/shared';
 import type { DeleteSafety } from '@leviosa/shared';
 import { TriangleAlert } from 'lucide-react';
 import { Route } from '@/lib/constants';
-import { useDeleteVolume } from '@/hooks/index.hooks';
+import { useDeleteVolume, useHostId } from '@/hooks/index.hooks';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -43,9 +43,10 @@ export function DeleteDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
+  const hostId = useHostId();
   const [typed, setTyped] = useState('');
-  const mutation = useDeleteVolume(() => {
-    router.push(Route.DASHBOARD);
+  const mutation = useDeleteVolume(hostId, () => {
+    router.push(Route.dashboard(hostId));
   });
 
   const matches = typed === volumeName;

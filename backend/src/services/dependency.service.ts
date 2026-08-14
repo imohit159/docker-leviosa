@@ -1,6 +1,7 @@
 import { VolumeUsage } from '@leviosa/shared';
 import type { VolumeConsumer, VolumeUsageReport } from '@leviosa/shared';
 import { ContainerRepository } from '../docker/index.docker.js';
+import type { HostContext } from '../docker/index.docker.js';
 import type { ContainerRecord, ContainerVolumeMount } from '../types/internal.types.js';
 
 function _toConsumer(container: ContainerRecord, mount: ContainerVolumeMount): VolumeConsumer {
@@ -36,8 +37,8 @@ function _byRelevance(left: VolumeConsumer, right: VolumeConsumer): number {
  */
 export const DependencyService = Object.freeze({
   /** Volume name -> every container referencing it, running or not. */
-  async buildGraph(): Promise<Map<string, VolumeConsumer[]>> {
-    const containers = await ContainerRepository.listAll();
+  async buildGraph(host: HostContext): Promise<Map<string, VolumeConsumer[]>> {
+    const containers = await ContainerRepository.listAll(host);
     const graph = new Map<string, VolumeConsumer[]>();
 
     for (const container of containers) {
@@ -55,8 +56,8 @@ export const DependencyService = Object.freeze({
     return graph;
   },
 
-  async consumersOf(volumeName: string): Promise<VolumeConsumer[]> {
-    const graph = await DependencyService.buildGraph();
+  async consumersOf(host: HostContext, volumeName: string): Promise<VolumeConsumer[]> {
+    const graph = await DependencyService.buildGraph(host);
     return graph.get(volumeName) ?? [];
   },
 

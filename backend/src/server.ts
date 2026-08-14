@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import process from 'node:process';
 import { AppMeta, Config } from './config/index.config.js';
-import { DockerClient, SidecarRunner } from './docker/index.docker.js';
+import { HostRegistry, SidecarRunner } from './docker/index.docker.js';
 import { SnapshotScheduler } from './scheduler/index.scheduler.js';
 import { SqliteClient } from './store/index.store.js';
 import { Logger } from './utils/index.utils.js';
@@ -13,6 +13,11 @@ const SHUTDOWN_SIGNALS: readonly NodeJS.Signals[] = Object.freeze(['SIGINT', 'SI
 
 let shuttingDown = false;
 
+/** Best-effort stray sweep per host. Failures are logged by the runner and ignored. */
+async function _reapStraysEverywhere(): Promise<void> {
+  await Promise.allSettled(HostRegistry.enabled().map(async (host) => SidecarRunner.reapStrays(host)));
+}
+
 /**
  * Boot order matters: state first, then the daemon probe, then background work, and the
  * listener last, so nothing can serve a request against half-initialised state.
@@ -20,16 +25,19 @@ let shuttingDown = false;
 async function bootstrap(): Promise<Server> {
   SqliteClient.connect();
 
-  const reachable = await DockerClient.ping();
-  if (reachable) {
-    // A previous process may have died mid-scan; its sidecars are ours to clean up.
-    await SidecarRunner.reapStrays();
-  } else {
+  const local = HostRegistry.bootstrap();
+  const reachable = await local.ping();
+  if (!reachable) {
     log.error(
-      { socketPath: Config.docker.socketPath, host: Config.docker.host },
-      'Docker daemon is unreachable. The API will start and report degraded health.',
+      { endpoint: local.endpointDescription },
+      'Local Docker daemon is unreachable. The API will start and report degraded health.',
     );
   }
+
+  // Fire-and-forget across every host: a previous process may have died mid-scan and
+  // its sidecars are ours to clean up, but an unreachable VPS must not hold up the
+  // listener while it waits out a connect timeout.
+  void _reapStraysEverywhere();
 
   SnapshotScheduler.start();
 
@@ -71,6 +79,7 @@ function installShutdownHooks(server: Server): void {
 
     SnapshotScheduler.stop();
     server.close(() => {
+      HostRegistry.disposeAll();
       SqliteClient.close();
       clearTimeout(forceExit);
       log.info('shutdown complete');

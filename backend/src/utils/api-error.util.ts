@@ -58,12 +58,51 @@ export const ApiErrors = Object.freeze({
     });
   },
 
-  volumeNotFound(name: string): ApiError {
+  volumeNotFound(name: string, hostLabel: string): ApiError {
     return new ApiError({
       status: HttpStatus.NOT_FOUND,
       code: ErrorCode.VOLUME_NOT_FOUND,
-      message: `Volume "${name}" does not exist on this daemon.`,
+      message: `Volume "${name}" does not exist on ${hostLabel}.`,
       details: { volumeName: name },
+    });
+  },
+
+  hostNotFound(hostId: string): ApiError {
+    return new ApiError({
+      status: HttpStatus.NOT_FOUND,
+      code: ErrorCode.HOST_NOT_FOUND,
+      message: `No host is registered with id "${hostId}".`,
+      details: { hostId },
+    });
+  },
+
+  hostAlreadyExists(hostId: string): ApiError {
+    return new ApiError({
+      status: HttpStatus.CONFLICT,
+      code: ErrorCode.HOST_ALREADY_EXISTS,
+      message: `A host with id "${hostId}" already exists.`,
+      details: { hostId },
+    });
+  },
+
+  hostProtected(reason: string): ApiError {
+    return new ApiError({
+      status: HttpStatus.FORBIDDEN,
+      code: ErrorCode.HOST_PROTECTED,
+      message: reason,
+    });
+  },
+
+  /**
+   * Carries the presented fingerprint so the UI can show exactly what answered, which
+   * is the only thing an operator can meaningfully compare against their own records.
+   */
+  hostKeyUnverified(hostId: string, reason: string, presentedFingerprint: string | null): ApiError {
+    return new ApiError({
+      status: HttpStatus.FORBIDDEN,
+      code: ErrorCode.HOST_KEY_UNVERIFIED,
+      message: reason,
+      details: { hostId, presentedFingerprint },
     });
   },
 

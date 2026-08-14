@@ -2,6 +2,7 @@ import type { Container } from 'dockerode';
 import { Config, Sidecar } from '../config/index.config.js';
 import { ApiErrors, Identifier, Logger } from '../utils/index.utils.js';
 import { DockerClient } from './docker.client.js';
+import type { HostContext } from './host-context.js';
 
 const log = Logger.for('sidecar');
 
@@ -29,8 +30,15 @@ export interface SidecarRunResult {
   durationMs: number;
 }
 
-/** One in-flight image check shared by every concurrent scan. */
-let imageReady: Promise<void> | null = null;
+/**
+ * One in-flight image check per host, shared by that host's concurrent scans.
+ *
+ * Per host, not per process: the scanner image being present locally says nothing about
+ * whether a VPS has it. A single shared promise would let a local hit satisfy the check
+ * for every remote, which then fails at container creation with a confusing "no such
+ * image" instead of pulling.
+ */
+const imageReadyByHost = new Map<string, Promise<void>>();
 
 /**
  * Splits a framed Docker log buffer into its stdout and stderr halves. Falls back
@@ -71,8 +79,8 @@ function _toEnvArray(env: Record<string, string>): string[] {
   return Object.entries(env).map(([key, value]) => `${key}=${value}`);
 }
 
-async function _createContainer(options: SidecarRunOptions): Promise<Container> {
-  return DockerClient.raw().createContainer({
+async function _createContainer(host: HostContext, options: SidecarRunOptions): Promise<Container> {
+  return host.docker.createContainer({
     name: `${Sidecar.NAME_PREFIX}-${Identifier.nameSuffix()}`,
     Image: Config.scan.image,
     Cmd: ['/bin/sh', '-c', options.script],
@@ -134,15 +142,20 @@ export const SidecarRunner = Object.freeze({
    * Guarantees the scanner image exists locally, pulling once if allowed. Concurrent
    * callers share a single check so a burst of scans cannot trigger parallel pulls.
    */
-  async ensureImage(): Promise<void> {
-    imageReady ??= (async () => {
-      const docker = DockerClient.raw();
+  async ensureImage(host: HostContext): Promise<void> {
+    const existing = imageReadyByHost.get(host.hostId);
+    if (existing) {
+      return existing;
+    }
+
+    const check = (async () => {
+      const docker = host.docker;
       try {
         await docker.getImage(Config.scan.image).inspect();
         return;
       } catch (error) {
         if (!DockerClient.isNotFound(error)) {
-          throw DockerClient.toApiError(error, `inspecting scanner image "${Config.scan.image}"`);
+          throw host.toApiError(error, `inspecting scanner image "${Config.scan.image}"`);
         }
       }
 
@@ -150,7 +163,7 @@ export const SidecarRunner = Object.freeze({
         throw ApiErrors.scanImageUnavailable(Config.scan.image);
       }
 
-      log.info({ image: Config.scan.image }, 'pulling scanner image');
+      log.info({ image: Config.scan.image, hostId: host.hostId }, 'pulling scanner image');
       try {
         const stream = await docker.pull(Config.scan.image);
         await new Promise<void>((resolvePull, rejectPull) => {
@@ -161,25 +174,31 @@ export const SidecarRunner = Object.freeze({
       }
     })().catch((error: unknown) => {
       // Never cache a failed check: the operator may fix connectivity and retry.
-      imageReady = null;
+      imageReadyByHost.delete(host.hostId);
       throw error;
     });
 
-    return imageReady;
+    imageReadyByHost.set(host.hostId, check);
+    return check;
+  },
+
+  /** Forgets a host's cached image check, so a rebuilt transport re-probes. */
+  forgetImage(hostId: string): void {
+    imageReadyByHost.delete(hostId);
   },
 
   /**
    * Runs the probe against one volume and returns its output. The container is
    * always removed, including on timeout, so a failed scan leaves nothing behind.
    */
-  async run(options: SidecarRunOptions): Promise<SidecarRunResult> {
-    await SidecarRunner.ensureImage();
+  async run(host: HostContext, options: SidecarRunOptions): Promise<SidecarRunResult> {
+    await SidecarRunner.ensureImage(host);
 
     const startedAt = Date.now();
     let container: Container | null = null;
 
     try {
-      container = await _createContainer(options);
+      container = await _createContainer(host, options);
       await container.start();
 
       const { exitCode, timedOut } = await _waitWithBudget(container, options.timeoutMs);
@@ -189,7 +208,7 @@ export const SidecarRunner = Object.freeze({
 
       return { stdout, stderr, exitCode, timedOut, durationMs: Date.now() - startedAt };
     } catch (error) {
-      throw DockerClient.toApiError(error, `running the scanner against volume "${options.volumeName}"`);
+      throw host.toApiError(error, `running the scanner against volume "${options.volumeName}"`);
     } finally {
       if (container) {
         await container.remove({ force: true, v: false }).catch((error: unknown) => {
@@ -203,16 +222,16 @@ export const SidecarRunner = Object.freeze({
    * Removes sidecars left behind by a previous process that died mid-scan. Called
    * once at boot; identified purely by our own ownership label.
    */
-  async reapStrays(): Promise<number> {
+  async reapStrays(host: HostContext): Promise<number> {
     try {
-      const strays = await DockerClient.raw().listContainers({
+      const strays = await host.docker.listContainers({
         all: true,
         filters: { label: [`${Sidecar.OWNER_LABEL}=${Sidecar.OWNER_VALUE}`] },
       });
 
       let reaped = 0;
       for (const stray of strays) {
-        await DockerClient.raw()
+        await host.docker
           .getContainer(stray.Id)
           .remove({ force: true, v: false })
           .then(() => {
@@ -224,11 +243,13 @@ export const SidecarRunner = Object.freeze({
       }
 
       if (reaped > 0) {
-        log.info({ reaped }, 'reaped stray sidecar containers from a previous run');
+        log.info({ reaped, hostId: host.hostId }, 'reaped stray sidecar containers from a previous run');
       }
       return reaped;
     } catch (error) {
-      log.warn({ err: error }, 'stray sidecar sweep skipped');
+      // Never fatal, and never blocking: an unreachable host at boot must not stop the
+      // API from starting or delay the hosts that are healthy.
+      log.warn({ err: error, hostId: host.hostId }, 'stray sidecar sweep skipped');
       return 0;
     }
   },

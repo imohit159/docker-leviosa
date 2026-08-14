@@ -1,7 +1,8 @@
 import { JobState } from '@leviosa/shared';
 import type { QueueStats, ScanJob } from '@leviosa/shared';
-import { AuditAction, Config } from '../config/index.config.js';
+import { AuditAction, Config, HOST_VOLUME_SEPARATOR } from '../config/index.config.js';
 import { VolumeRepository } from '../docker/index.docker.js';
+import type { HostContext } from '../docker/index.docker.js';
 import { ScannerService } from '../scanner/index.scanner.js';
 import { MeasurementMapper } from '../services/measurement.mapper.js';
 import { AuditRepository, MeasurementRepository } from '../store/index.store.js';
@@ -20,14 +21,42 @@ interface JobEntry {
   settled: Promise<StoredMeasurement>;
 }
 
-const queue = TaskQueue.create({
-  concurrency: Config.scan.concurrency,
-  limit: Config.scan.queueLimit,
-});
+/**
+ * One queue per host, each with its own concurrency budget.
+ *
+ * A single shared queue would let one slow or unreachable host occupy every worker slot
+ * — scans against a dead VPS sit there until the timeout expires — and starve the local
+ * daemon's scans behind them. Isolating the budgets means a remote host can only ever
+ * degrade itself.
+ */
+const queuesByHost = new Map<string, ReturnType<typeof TaskQueue.create>>();
+
+function _queueFor(hostId: string): ReturnType<typeof TaskQueue.create> {
+  const existing = queuesByHost.get(hostId);
+  if (existing) {
+    return existing;
+  }
+  const created = TaskQueue.create({
+    concurrency: Config.scan.concurrency,
+    limit: Config.scan.queueLimit,
+  });
+  queuesByHost.set(hostId, created);
+  return created;
+}
 
 const jobs = new Map<string, JobEntry>();
-/** Volume name -> job id, for the currently queued or running scan of that volume. */
+/**
+ * `hostId/volumeName` -> job id, for the currently queued or running scan.
+ *
+ * Keyed by host as well as name because volume names are only unique per daemon: a
+ * `postgres-data` on two hosts is two different volumes, and a name-only key would
+ * silently hand the second one the first one's job and its numbers.
+ */
 const activeByVolume = new Map<string, string>();
+
+function _activeKey(hostId: string, volumeName: string): string {
+  return `${hostId}${HOST_VOLUME_SEPARATOR}${volumeName}`;
+}
 
 function _isSettled(state: ScanJob['state']): boolean {
   return state === JobState.SUCCEEDED || state === JobState.FAILED || state === JobState.CANCELLED;
@@ -48,15 +77,16 @@ function _evictOldFinishedJobs(): void {
 }
 
 /** Measures one volume and appends the result to the history table. */
-async function _execute(volumeName: string): Promise<StoredMeasurement> {
-  const volume = await VolumeRepository.findOrFail(volumeName);
+async function _execute(host: HostContext, volumeName: string): Promise<StoredMeasurement> {
+  const volume = await VolumeRepository.findOrFail(host, volumeName);
   const outcome = await ScannerService.measure({
+    host,
     volumeName: volume.name,
     mountpoint: volume.mountpoint,
   });
 
-  const stored = MeasurementRepository.record(volume.name, outcome.measurement, outcome.entries);
-  AuditRepository.record(AuditAction.SCAN_COMPLETED, volume.name, {
+  const stored = MeasurementRepository.record(host.hostId, volume.name, outcome.measurement, outcome.entries);
+  AuditRepository.record(host.hostId, AuditAction.SCAN_COMPLETED, volume.name, {
     totalBytes: stored.totalBytes,
     source: stored.source,
     durationMs: stored.durationMs,
@@ -78,12 +108,15 @@ export const ScanQueue = Object.freeze({
    * Submits a scan. Requesting a volume that is already queued or running returns the
    * existing job rather than piling on duplicate work.
    */
-  enqueue(volumeName: string): ScanJob {
-    const activeId = activeByVolume.get(volumeName);
+  enqueue(host: HostContext, volumeName: string): ScanJob {
+    const activeKey = _activeKey(host.hostId, volumeName);
+    const activeId = activeByVolume.get(activeKey);
     const active = activeId === undefined ? undefined : jobs.get(activeId);
     if (active && !_isSettled(active.job.state)) {
       return ScanQueue.describe(active.job);
     }
+
+    const queue = _queueFor(host.hostId);
 
     // Refuse here rather than returning a job handle that is already doomed: the caller
     // deserves a 429 it can act on, not an accepted job that fails a microtask later.
@@ -93,6 +126,7 @@ export const ScanQueue = Object.freeze({
 
     const job: ScanJob = {
       id: Identifier.uuid(),
+      hostId: host.hostId,
       volumeName,
       state: JobState.QUEUED,
       queuePosition: queue.backlog(),
@@ -108,7 +142,7 @@ export const ScanQueue = Object.freeze({
         job.state = JobState.RUNNING;
         job.startedAt = Clock.nowIso();
         job.queuePosition = null;
-        return _execute(volumeName);
+        return _execute(host, volumeName);
       })
       .then((stored) => {
         job.state = JobState.SUCCEEDED;
@@ -120,13 +154,13 @@ export const ScanQueue = Object.freeze({
         job.state = JobState.FAILED;
         job.finishedAt = Clock.nowIso();
         job.error = error instanceof Error ? error.message : 'unknown scan failure';
-        AuditRepository.record(AuditAction.SCAN_FAILED, volumeName, { reason: job.error });
-        log.warn({ err: error, volume: volumeName }, 'scan job failed');
+        AuditRepository.record(host.hostId, AuditAction.SCAN_FAILED, volumeName, { reason: job.error });
+        log.warn({ err: error, hostId: host.hostId, volume: volumeName }, 'scan job failed');
         throw error;
       })
       .finally(() => {
-        if (activeByVolume.get(volumeName) === job.id) {
-          activeByVolume.delete(volumeName);
+        if (activeByVolume.get(activeKey) === job.id) {
+          activeByVolume.delete(activeKey);
         }
         _evictOldFinishedJobs();
       });
@@ -136,14 +170,14 @@ export const ScanQueue = Object.freeze({
     settled.catch(() => undefined);
 
     jobs.set(job.id, { job, settled });
-    activeByVolume.set(volumeName, job.id);
+    activeByVolume.set(activeKey, job.id);
 
     return ScanQueue.describe(job);
   },
 
   /** Enqueues and waits. Used by the scheduler and by callers that want a fresh number. */
-  async run(volumeName: string): Promise<StoredMeasurement> {
-    const job = ScanQueue.enqueue(volumeName);
+  async run(host: HostContext, volumeName: string): Promise<StoredMeasurement> {
+    const job = ScanQueue.enqueue(host, volumeName);
     const entry = jobs.get(job.id);
     if (!entry) {
       throw new Error(`Scan job ${job.id} vanished before it could be awaited.`);
@@ -161,7 +195,8 @@ export const ScanQueue = Object.freeze({
     return { ...job };
   },
 
-  stats(): QueueStats {
-    return queue.stats();
+  /** Queue depth for one host. The dashboard reports the host it is looking at. */
+  stats(hostId: string): QueueStats {
+    return _queueFor(hostId).stats();
   },
 });

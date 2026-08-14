@@ -1,5 +1,6 @@
 import type { VolumeBrowseResult } from '@leviosa/shared';
 import { VolumeRepository } from '../docker/index.docker.js';
+import type { HostContext } from '../docker/index.docker.js';
 import { ScannerService } from '../scanner/index.scanner.js';
 import { ApiErrors, VolumePath } from '../utils/index.utils.js';
 import { MeasurementMapper } from './measurement.mapper.js';
@@ -12,19 +13,20 @@ import { MeasurementMapper } from './measurement.mapper.js';
  * misleading, and a depth-one listing is cheap compared with a full recursive walk.
  */
 export const BrowseService = Object.freeze({
-  async list(volumeName: string, requestedPath: string): Promise<VolumeBrowseResult> {
+  async list(host: HostContext, volumeName: string, requestedPath: string): Promise<VolumeBrowseResult> {
     const normalized = VolumePath.normalize(requestedPath);
     if (normalized === null) {
       throw ApiErrors.pathTraversal(requestedPath);
     }
 
-    const volume = await VolumeRepository.findOrFail(volumeName);
+    const volume = await VolumeRepository.findOrFail(host, volumeName);
     const listing = await ScannerService.list(
-      { volumeName: volume.name, mountpoint: volume.mountpoint },
+      { host, volumeName: volume.name, mountpoint: volume.mountpoint },
       normalized,
     );
 
     return {
+      hostId: host.hostId,
       volumeName: volume.name,
       path: normalized,
       parentPath: VolumePath.parentOf(normalized),

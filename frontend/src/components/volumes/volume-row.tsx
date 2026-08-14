@@ -70,7 +70,8 @@ function ConsumerCell({ volume }: { volume: VolumeSummary }) {
  * the big one?".
  */
 function SizeCell({ volume }: { volume: VolumeSummary }) {
-  const scan = useScan(volume.name);
+  // The row's own payload names its host, so the cell never has to guess from the URL.
+  const scan = useScan(volume.hostId, volume.name);
 
   if (!volume.size) {
     return (
@@ -112,7 +113,7 @@ function SizeCell({ volume }: { volume: VolumeSummary }) {
 export function VolumeRow({ volume }: { volume: VolumeSummary }) {
   const router = useRouter();
   const safe = volume.safety.deletable;
-  const href = Route.volume(volume.name);
+  const href = Route.volume(volume.hostId, volume.name);
 
   const open = () => {
     router.push(href);

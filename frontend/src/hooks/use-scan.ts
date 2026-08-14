@@ -30,13 +30,13 @@ export interface ScanController {
  * subscription would deliver the same single state transition an interval already
  * catches, at the cost of an SSE endpoint and its reconnection logic.
  */
-export function useScan(volumeName: string): ScanController {
+export function useScan(hostId: string, volumeName: string): ScanController {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
   const settledRef = useRef(false);
 
   const mutation = useMutation({
-    mutationFn: () => VolumeApi.scan(volumeName),
+    mutationFn: () => VolumeApi.scan(hostId, volumeName),
     onSuccess: (job) => {
       settledRef.current = false;
       setJobId(job.id);
@@ -59,10 +59,10 @@ export function useScan(volumeName: string): ScanController {
     }
     settledRef.current = true;
     // The measurement is now the newest row for this volume; every view of it is stale.
-    void queryClient.invalidateQueries({ queryKey: QueryKey.allVolumes() });
-    void queryClient.invalidateQueries({ queryKey: QueryKey.volume(volumeName) });
-    void queryClient.invalidateQueries({ queryKey: QueryKey.systemSummary() });
-  }, [job, queryClient, volumeName]);
+    void queryClient.invalidateQueries({ queryKey: QueryKey.allVolumes(hostId) });
+    void queryClient.invalidateQueries({ queryKey: QueryKey.volume(hostId, volumeName) });
+    void queryClient.invalidateQueries({ queryKey: QueryKey.systemSummary(hostId) });
+  }, [job, queryClient, hostId, volumeName]);
 
   const start = useCallback(() => {
     mutation.mutate();

@@ -8,8 +8,9 @@ import { ByteFormat } from '@leviosa/shared';
 import type { SystemSummary } from '@leviosa/shared';
 import { Route, SearchParam, VolumeScope } from '@/lib/constants';
 import type { VolumeScopeId } from '@/lib/constants';
-import { useSystemSummary } from '@/hooks/index.hooks';
+import { useHostId, useSystemSummary } from '@/hooks/index.hooks';
 import { BrandMark } from '@/components/ui/brand-mark';
+import { HostSwitcher } from './host-switcher';
 import { Highlight, HighlightItem } from '@/components/unlumen-ui/primitives/effects/highlight';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
 import { cn } from '@/lib/utils';
@@ -33,23 +34,23 @@ function scopeCount(summary: SystemSummary | undefined, id: VolumeScopeId): numb
   return counts[id];
 }
 
-function scopeHref(id: VolumeScopeId): string {
+function scopeHref(hostId: string, id: VolumeScopeId): string {
   const scope = VolumeScope.find((entry) => entry.id === id);
-  return scope?.usage
-    ? `${Route.DASHBOARD}?${SearchParam.USAGE}=${scope.usage}`
-    : Route.DASHBOARD;
+  const dashboard = Route.dashboard(hostId);
+  return scope?.usage ? `${dashboard}?${SearchParam.USAGE}=${scope.usage}` : dashboard;
 }
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { data: summary } = useSystemSummary();
+  const hostId = useHostId();
+  const { data: summary } = useSystemSummary(hostId);
 
   const activeUsage = searchParams.get(SearchParam.USAGE);
   // A volume detail route belongs to no scope: highlighting "All volumes" there would
   // claim a filter is applied when none is.
   const activeId: VolumeScopeId | null =
-    pathname === Route.DASHBOARD
+    pathname === Route.dashboard(hostId)
       ? (VolumeScope.find((scope) => scope.usage === activeUsage)?.id ?? 'all')
       : null;
 
@@ -74,7 +75,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           return (
             <HighlightItem key={scope.id} value={scope.id} asChild>
               <Link
-                href={scopeHref(scope.id)}
+                href={scopeHref(hostId, scope.id)}
                 onClick={onNavigate}
                 title={scope.hint}
                 aria-current={isActive ? 'page' : undefined}
@@ -120,7 +121,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
  * rather than the top because it is a conclusion, not a filter.
  */
 function ReclaimCallout() {
-  const { data: summary } = useSystemSummary();
+  const hostId = useHostId();
+  const { data: summary } = useSystemSummary(hostId);
 
   if (!summary) {
     return (
@@ -135,7 +137,7 @@ function ReclaimCallout() {
 
   return (
     <Link
-      href={`${Route.DASHBOARD}?${SearchParam.USAGE}=ORPHANED`}
+      href={scopeHref(hostId, 'orphaned')}
       className={cn(
         'mx-2.5 block rounded-lg border p-3 transition-colors',
         hasReclaimable
@@ -170,7 +172,8 @@ function ReclaimCallout() {
 
 /** Unmeasured volumes make every total on screen a lower bound; say so once, here. */
 function CoverageNote() {
-  const { data: summary } = useSystemSummary();
+  const hostId = useHostId();
+  const { data: summary } = useSystemSummary(hostId);
 
   if (!summary || summary.unmeasuredCount === 0) return null;
 
@@ -199,7 +202,11 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <SidebarBrand />
-      <div className="flex-1 overflow-y-auto pb-4">
+      {/* Host sits above the scopes because it qualifies all of them: the counts below
+          are counts on one machine, and reading them without that context is the whole
+          risk multi-host introduces. */}
+      <HostSwitcher onNavigate={onNavigate} />
+      <div className="flex-1 overflow-y-auto pt-4 pb-4">
         <SidebarNav onNavigate={onNavigate} />
       </div>
       <div className="space-y-3 border-t border-sidebar-border py-4">

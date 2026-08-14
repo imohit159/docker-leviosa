@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, Gauge, Network, Trash2 } from 'lucide-react';
 import type { ComponentType } from 'react';
-import { Route } from '@/lib/constants';
+import { LOCAL_HOST_ID, Route } from '@/lib/constants';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -108,7 +108,7 @@ function LandingNav() {
 
         <Shine enableOnHover className="rounded-full">
           <Button
-            render={<Link href={Route.DASHBOARD} />}
+            render={<Link href={Route.dashboard(LOCAL_HOST_ID)} />}
             nativeButton={false}
             className="rounded-full px-4"
           >
@@ -153,7 +153,7 @@ function Hero() {
           <Shine enableOnHover className="rounded-full">
             <Button
               size="lg"
-              render={<Link href={Route.DASHBOARD} />}
+              render={<Link href={Route.dashboard(LOCAL_HOST_ID)} />}
               nativeButton={false}
               className="rounded-full px-6"
             >
@@ -287,7 +287,7 @@ function ClosingCta() {
             <Shine enableOnHover className="mx-auto mt-7 w-fit rounded-full">
               <Button
                 size="lg"
-                render={<Link href={Route.DASHBOARD} />}
+                render={<Link href={Route.dashboard(LOCAL_HOST_ID)} />}
                 nativeButton={false}
                 className="rounded-full px-6"
               >
@@ -308,7 +308,7 @@ function LandingFooter() {
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <p>Leviosa — local-first Docker volume insight.</p>
         <Link
-          href={Route.DASHBOARD}
+          href={Route.dashboard(LOCAL_HOST_ID)}
           className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
         >
           Open dashboard

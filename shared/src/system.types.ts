@@ -1,8 +1,10 @@
-import type { ScanSource } from './enums.shared.js';
+import type { HostKind, HostStatus, ScanSource } from './enums.shared.js';
 import type { QueueStats } from './job.types.js';
 
 /** Aggregate headline numbers for the dashboard. */
 export interface SystemSummary {
+  /** Host these figures describe. Totals are never summed across hosts. */
+  hostId: string;
   volumeCount: number;
   inUseCount: number;
   reservedCount: number;
@@ -30,8 +32,24 @@ export interface DaemonInfo {
   scanSourceReason: string;
 }
 
+/** One host's diagnostics, as reported by the health endpoint. */
+export interface HostDaemonReport extends DaemonInfo {
+  hostId: string;
+  label: string;
+  kind: HostKind;
+  status: HostStatus;
+}
+
 export interface HealthReport {
+  /**
+   * Health of the service, not of any single daemon.
+   *
+   * Degraded means no enabled host answered at all, so the tool can show nothing. A
+   * single unreachable VPS leaves this `ok` on purpose: it is reported through that
+   * host's own entry, and letting it flip the top level would turn one dead remote
+   * into a 503 on every request, including for hosts that are perfectly healthy.
+   */
   status: 'ok' | 'degraded';
   uptimeSeconds: number;
-  daemon: DaemonInfo;
+  hosts: HostDaemonReport[];
 }

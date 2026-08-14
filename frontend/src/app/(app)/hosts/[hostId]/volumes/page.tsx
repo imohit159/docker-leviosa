@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { CountFormat } from '@leviosa/shared';
-import { useSystemSummary, useVolumeQuery, useVolumes } from '@/hooks/index.hooks';
+import { useCurrentHost, useHostId, useSystemSummary, useVolumeQuery, useVolumes } from '@/hooks/index.hooks';
 import { VolumeScope } from '@/lib/constants';
 import { Card } from '@/components/ui/card';
 import { ErrorState, TableSkeleton } from '@/components/ui/states';
@@ -21,9 +21,11 @@ import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
  * misread this screen can produce, given a delete button sits two clicks away.
  */
 function DashboardView() {
+  const hostId = useHostId();
+  const host = useCurrentHost();
   const { query, usage } = useVolumeQuery();
-  const summary = useSystemSummary();
-  const volumes = useVolumes(query);
+  const summary = useSystemSummary(hostId);
+  const volumes = useVolumes(hostId, query);
 
   const scope = VolumeScope.find((entry) => entry.usage === usage) ?? VolumeScope[0];
   const total = volumes.data?.page.total;
@@ -33,8 +35,10 @@ function DashboardView() {
       <header>
         <h1 className="text-lg font-semibold tracking-tight">{scope.label}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Size, contents, container dependencies and safe-to-delete guidance for every volume on
-          this daemon.
+          Size, contents, container dependencies and safe-to-delete guidance for every volume on{' '}
+          {/* Names the machine explicitly: with several daemons in play, "this daemon" is
+              exactly the ambiguity that gets the wrong volume deleted. */}
+          <span className="font-medium text-foreground">{host?.label ?? hostId}</span>.
         </p>
       </header>
 

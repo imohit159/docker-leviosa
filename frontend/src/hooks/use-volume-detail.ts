@@ -7,10 +7,10 @@ import { VolumeApi } from '@/lib/api.endpoints';
 import { PollInterval, QueryConfig } from '@/lib/constants';
 import { QueryKey } from '@/lib/query-keys';
 
-export function useVolumeDetail(name: string, days: number = GrowthDefaults.DAYS) {
+export function useVolumeDetail(hostId: string, name: string, days: number = GrowthDefaults.DAYS) {
   return useQuery<VolumeDetail>({
-    queryKey: QueryKey.volume(name),
-    queryFn: () => VolumeApi.detail(name, days),
+    queryKey: QueryKey.volume(hostId, name),
+    queryFn: () => VolumeApi.detail(hostId, name, days),
     refetchInterval: PollInterval.INVENTORY_MS,
     staleTime: QueryConfig.STALE_TIME_MS,
     retry: QueryConfig.RETRY_COUNT,
@@ -22,10 +22,10 @@ export function useVolumeDetail(name: string, days: number = GrowthDefaults.DAYS
  * slice of the cached measurement, because a stale file listing is worse than no
  * listing; `enabled` lets the caller defer until the user opens the browser.
  */
-export function useVolumeEntries(name: string, path: string, enabled: boolean) {
+export function useVolumeEntries(hostId: string, name: string, path: string, enabled: boolean) {
   return useQuery<VolumeBrowseResult>({
-    queryKey: QueryKey.volumeEntries(name, path),
-    queryFn: () => VolumeApi.entries(name, path),
+    queryKey: QueryKey.volumeEntries(hostId, name, path),
+    queryFn: () => VolumeApi.entries(hostId, name, path),
     enabled,
     staleTime: QueryConfig.STALE_TIME_MS,
     retry: QueryConfig.RETRY_COUNT,

@@ -73,6 +73,17 @@ async function _unwrap<TData>(response: Response): Promise<TData> {
   return payload.data;
 }
 
+/** Adds a JSON body only when there is one, so a bodyless POST sends no content type. */
+function _jsonBody(body: unknown): RequestInit {
+  if (body === undefined) {
+    return {};
+  }
+  return {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
 /**
  * Thin typed wrapper over `fetch`. Every response passes through the shared envelope,
  * so a component never has to check `success` or dig for an error message.
@@ -82,9 +93,11 @@ export const ApiClient = Object.freeze({
     let response: Response;
     try {
       response = await fetch(`${ClientConfig.apiBaseUrl}${path}`, {
-        headers: { Accept: 'application/json' },
         cache: 'no-store',
         ...init,
+        // Merged rather than spread over: a caller supplying a content type must not
+        // silently drop the Accept header every response is unwrapped against.
+        headers: { Accept: 'application/json', ...init?.headers },
       });
     } catch (error) {
       // A network-level failure means the API process is down or CORS blocked us.
@@ -103,8 +116,19 @@ export const ApiClient = Object.freeze({
     return ApiClient.request<TData>(`${path}${_toQueryString(params)}`);
   },
 
-  post<TData>(path: string, params: Record<string, QueryValue> = {}): Promise<TData> {
-    return ApiClient.request<TData>(`${path}${_toQueryString(params)}`, { method: 'POST' });
+  post<TData>(
+    path: string,
+    params: Record<string, QueryValue> = {},
+    body?: unknown,
+  ): Promise<TData> {
+    return ApiClient.request<TData>(`${path}${_toQueryString(params)}`, {
+      method: 'POST',
+      ..._jsonBody(body),
+    });
+  },
+
+  patch<TData>(path: string, body: unknown): Promise<TData> {
+    return ApiClient.request<TData>(path, { method: 'PATCH', ..._jsonBody(body) });
   },
 
   delete<TData>(path: string, params: Record<string, QueryValue> = {}): Promise<TData> {

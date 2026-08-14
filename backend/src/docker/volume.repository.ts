@@ -4,7 +4,9 @@ import { CacheKey, Config } from '../config/index.config.js';
 import { ApiErrors, Clock, TtlCache } from '../utils/index.utils.js';
 import type { VolumeRecord } from '../types/internal.types.js';
 import { DockerClient } from './docker.client.js';
+import type { HostContext } from './host-context.js';
 
+/** Shared instance, host-namespaced keys. See the note in `container.repository.ts`. */
 const inventoryCache = TtlCache.create<VolumeRecord[]>(Config.docker.inventoryCacheMs);
 
 interface VolumeInspectInfoWithCreation extends VolumeInspectInfo {
@@ -26,36 +28,36 @@ function _toRecord(info: VolumeInspectInfoWithCreation): VolumeRecord {
 }
 
 export const VolumeRepository = Object.freeze({
-  async listAll(): Promise<VolumeRecord[]> {
-    return inventoryCache.resolve(CacheKey.VOLUME_INVENTORY, async () => {
+  async listAll(host: HostContext): Promise<VolumeRecord[]> {
+    return inventoryCache.resolve(CacheKey.for(host.hostId, CacheKey.VOLUME_INVENTORY), async () => {
       try {
-        const response = await DockerClient.raw().listVolumes();
+        const response = await host.docker.listVolumes();
         const volumes = (response.Volumes ?? []) as VolumeInspectInfoWithCreation[];
         return volumes.map(_toRecord);
       } catch (error) {
-        throw DockerClient.toApiError(error, 'listing volumes');
+        throw host.toApiError(error, 'listing volumes');
       }
     });
   },
 
   /** Returns null when the volume does not exist, so callers can 404 deliberately. */
-  async find(name: string): Promise<VolumeRecord | null> {
+  async find(host: HostContext, name: string): Promise<VolumeRecord | null> {
     try {
-      const info = (await DockerClient.raw().getVolume(name).inspect()) as VolumeInspectInfoWithCreation;
+      const info = (await host.docker.getVolume(name).inspect()) as VolumeInspectInfoWithCreation;
       return _toRecord(info);
     } catch (error) {
       if (DockerClient.isNotFound(error)) {
         return null;
       }
-      throw DockerClient.toApiError(error, `inspecting volume "${name}"`);
+      throw host.toApiError(error, `inspecting volume "${name}"`);
     }
   },
 
   /** Same as `find`, but raises the canonical 404 for controllers. */
-  async findOrFail(name: string): Promise<VolumeRecord> {
-    const record = await VolumeRepository.find(name);
+  async findOrFail(host: HostContext, name: string): Promise<VolumeRecord> {
+    const record = await VolumeRepository.find(host, name);
     if (!record) {
-      throw ApiErrors.volumeNotFound(name);
+      throw ApiErrors.volumeNotFound(name, host.label);
     }
     return record;
   },
@@ -65,24 +67,24 @@ export const VolumeRepository = Object.freeze({
    * surface that as VOLUME_IN_USE even though the safety service should have caught
    * it first, because the inventory can change between the check and the call.
    */
-  async remove(name: string): Promise<void> {
+  async remove(host: HostContext, name: string): Promise<void> {
     try {
-      await DockerClient.raw().getVolume(name).remove();
-      inventoryCache.invalidate();
+      await host.docker.getVolume(name).remove();
+      VolumeRepository.invalidate(host);
     } catch (error) {
       if (DockerClient.isNotFound(error)) {
-        throw ApiErrors.volumeNotFound(name);
+        throw ApiErrors.volumeNotFound(name, host.label);
       }
       if (DockerClient.isConflict(error)) {
         throw ApiErrors.volumeInUse(name, {
           hint: 'The daemon rejected the removal. A container started referencing it moments ago.',
         });
       }
-      throw DockerClient.toApiError(error, `removing volume "${name}"`);
+      throw host.toApiError(error, `removing volume "${name}"`);
     }
   },
 
-  invalidate(): void {
-    inventoryCache.invalidate();
+  invalidate(host: HostContext): void {
+    inventoryCache.invalidate(CacheKey.for(host.hostId, CacheKey.VOLUME_INVENTORY));
   },
 });

@@ -25,7 +25,7 @@ function _buildEnv(mode: string, path: string): Record<string, string> {
 }
 
 async function _probe(target: StrategyTarget, mode: string, path: string): Promise<ParsedScan> {
-  const result = await SidecarRunner.run({
+  const result = await SidecarRunner.run(target.host, {
     volumeName: target.volumeName,
     script: ScanScript.build(),
     env: _buildEnv(mode, path),

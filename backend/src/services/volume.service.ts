@@ -16,6 +16,7 @@ import type {
 } from '@leviosa/shared';
 import { AuditAction, Config } from '../config/index.config.js';
 import { ContainerRepository, VolumeRepository } from '../docker/index.docker.js';
+import type { HostContext } from '../docker/index.docker.js';
 import {
   AuditRepository,
   MeasurementRepository,
@@ -98,21 +99,22 @@ function _matches(summary: VolumeSummary, query: NormalizedVolumeListQuery): boo
   return true;
 }
 
-async function _loadContext(): Promise<AssemblyContext> {
+async function _loadContext(host: HostContext): Promise<AssemblyContext> {
   return {
-    consumersByVolume: await DependencyService.buildGraph(),
-    measurements: MeasurementRepository.latestForAll(),
-    sightings: SightingRepository.findAll(),
+    consumersByVolume: await DependencyService.buildGraph(host),
+    measurements: MeasurementRepository.latestForAll(host.hostId),
+    sightings: SightingRepository.findAll(host.hostId),
   };
 }
 
 /** Composes one row from the daemon record plus everything we know locally. */
-function _toSummary(volume: VolumeRecord, context: AssemblyContext): VolumeSummary {
+function _toSummary(host: HostContext, volume: VolumeRecord, context: AssemblyContext): VolumeSummary {
   const usage = DependencyService.summarize(context.consumersByVolume.get(volume.name) ?? []);
   const measurement = context.measurements.get(volume.name) ?? null;
   const reclaimable = measurement?.totalBytes ?? null;
 
   return {
+    hostId: host.hostId,
     name: volume.name,
     driver: volume.driver,
     scope: volume.scope,
@@ -139,8 +141,8 @@ function _bucketMsFor(days: number): number {
   return Math.max(MillisIn.HOUR, Math.ceil(windowMs / GrowthDefaults.MAX_POINTS));
 }
 
-function _buildGrowth(volumeName: string, days: number): GrowthSeries {
-  const stored = MeasurementRepository.series(volumeName, Clock.daysAgoMs(days), _bucketMsFor(days));
+function _buildGrowth(hostId: string, volumeName: string, days: number): GrowthSeries {
+  const stored = MeasurementRepository.series(hostId, volumeName, Clock.daysAgoMs(days), _bucketMsFor(days));
 
   let previous: number | null = null;
   const points: GrowthPoint[] = stored.map((point) => {
@@ -172,19 +174,19 @@ function _buildGrowth(volumeName: string, days: number): GrowthSeries {
  * predicates down into a store that lacks the data.
  */
 export const VolumeService = Object.freeze({
-  async list(query: NormalizedVolumeListQuery): Promise<Paginated<VolumeSummary>> {
-    const [volumes, context] = await Promise.all([VolumeRepository.listAll(), _loadContext()]);
+  async list(host: HostContext, query: NormalizedVolumeListQuery): Promise<Paginated<VolumeSummary>> {
+    const [volumes, context] = await Promise.all([VolumeRepository.listAll(host), _loadContext(host)]);
 
     const rows = volumes
-      .map((volume) => _toSummary(volume, context))
+      .map((volume) => _toSummary(host, volume, context))
       .filter((summary) => _matches(summary, query));
 
     return Pagination.slice(_sort(rows, query), query.limit, query.offset);
   },
 
-  async detail(name: string, growthDays: number): Promise<VolumeDetail> {
-    const [volume, context] = await Promise.all([VolumeRepository.findOrFail(name), _loadContext()]);
-    const summary = _toSummary(volume, context);
+  async detail(host: HostContext, name: string, growthDays: number): Promise<VolumeDetail> {
+    const [volume, context] = await Promise.all([VolumeRepository.findOrFail(host, name), _loadContext(host)]);
+    const summary = _toSummary(host, volume, context);
     const measurement = context.measurements.get(name) ?? null;
 
     return {
@@ -192,7 +194,7 @@ export const VolumeService = Object.freeze({
       topEntries: measurement
         ? MeasurementMapper.toEntries(measurement.topEntries, BrowseDefaults.ROOT_PATH)
         : [],
-      growth: _buildGrowth(name, growthDays),
+      growth: _buildGrowth(host.hostId, name, growthDays),
     };
   },
 
@@ -202,7 +204,7 @@ export const VolumeService = Object.freeze({
    * check is repeated here even though the client already saw it, because the container
    * inventory can change between rendering a page and clicking a button.
    */
-  async remove(name: string, confirm: string): Promise<VolumeDeleteResult> {
+  async remove(host: HostContext, name: string, confirm: string): Promise<VolumeDeleteResult> {
     if (!Config.features.allowVolumeDelete) {
       throw ApiErrors.featureDisabled('Volume deletion');
     }
@@ -210,13 +212,13 @@ export const VolumeService = Object.freeze({
       throw ApiErrors.confirmationRequired(name);
     }
 
-    const volume = await VolumeRepository.findOrFail(name);
-    const usage = DependencyService.summarize(await DependencyService.consumersOf(name));
-    const measurement = MeasurementRepository.latest(name);
+    const volume = await VolumeRepository.findOrFail(host, name);
+    const usage = DependencyService.summarize(await DependencyService.consumersOf(host, name));
+    const measurement = MeasurementRepository.latest(host.hostId, name);
     const safety = SafetyService.evaluate(volume, usage, measurement?.totalBytes ?? null);
 
     if (!safety.deletable) {
-      AuditRepository.record(AuditAction.VOLUME_DELETE_BLOCKED, name, {
+      AuditRepository.record(host.hostId, AuditAction.VOLUME_DELETE_BLOCKED, name, {
         verdict: safety.verdict,
         blockers: safety.blockers.map((blocker) => blocker.containerName),
       });
@@ -227,23 +229,23 @@ export const VolumeService = Object.freeze({
       });
     }
 
-    await VolumeRepository.remove(name);
+    await VolumeRepository.remove(host, name);
     // The volume is gone; its history would otherwise resurrect as a phantom row if a
     // future volume reused the name.
-    MeasurementRepository.forget(name);
-    SightingRepository.forget(name);
-    ContainerRepository.invalidate();
+    MeasurementRepository.forget(host.hostId, name);
+    SightingRepository.forget(host.hostId, name);
+    ContainerRepository.invalidate(host);
 
     const reclaimedBytes = measurement?.totalBytes ?? null;
-    AuditRepository.record(AuditAction.VOLUME_DELETED, name, { reclaimedBytes });
-    log.info({ volume: name, reclaimedBytes }, 'volume removed');
+    AuditRepository.record(host.hostId, AuditAction.VOLUME_DELETED, name, { reclaimedBytes });
+    log.info({ hostId: host.hostId, volume: name, reclaimedBytes }, 'volume removed');
 
-    return { name, deleted: true, reclaimedBytes };
+    return { hostId: host.hostId, name, deleted: true, reclaimedBytes };
   },
 
   /** Existence is verified against the daemon so an unknown name 404s instead of returning an empty series. */
-  async growth(name: string, days: number): Promise<GrowthSeries> {
-    await VolumeRepository.findOrFail(name);
-    return _buildGrowth(name, days);
+  async growth(host: HostContext, name: string, days: number): Promise<GrowthSeries> {
+    await VolumeRepository.findOrFail(host, name);
+    return _buildGrowth(host.hostId, name, days);
   },
 });

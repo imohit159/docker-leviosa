@@ -6,10 +6,10 @@ import { SystemApi } from '@/lib/api.endpoints';
 import { PollInterval, QueryConfig } from '@/lib/constants';
 import { QueryKey } from '@/lib/query-keys';
 
-export function useSystemSummary() {
+export function useSystemSummary(hostId: string) {
   return useQuery<SystemSummary>({
-    queryKey: QueryKey.systemSummary(),
-    queryFn: () => SystemApi.summary(),
+    queryKey: QueryKey.systemSummary(hostId),
+    queryFn: () => SystemApi.summary(hostId),
     refetchInterval: PollInterval.INVENTORY_MS,
     staleTime: QueryConfig.STALE_TIME_MS,
     retry: QueryConfig.RETRY_COUNT,

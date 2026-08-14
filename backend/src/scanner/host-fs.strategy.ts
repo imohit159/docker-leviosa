@@ -181,6 +181,19 @@ export const HostFsStrategy: ScanStrategy = Object.freeze({
   source: ScanSource.HOST_FS,
 
   async isUsable(target: StrategyTarget): Promise<boolean> {
+    /*
+     * The locality check must come first and must not be inferable from the filesystem.
+     *
+     * A remote daemon reports a mountpoint such as `/var/lib/docker/volumes/pgdata/_data`.
+     * On a developer machine that also runs Docker, that exact path frequently exists
+     * and is readable, so the `access()` probe below would return true and we would
+     * measure *local* bytes and store them against the remote host — wrong numbers with
+     * no error anywhere. Reachability cannot distinguish the two machines; only the
+     * host record can.
+     */
+    if (!target.host.isLocal) {
+      return false;
+    }
     if (!Config.scan.allowHostFs || target.mountpoint.length === 0) {
       return false;
     }

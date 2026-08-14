@@ -7,6 +7,7 @@ const log = Logger.for('store:audit');
 
 export interface AuditEvent {
   id: number;
+  hostId: string;
   action: AuditAction;
   volumeName: string | null;
   payload: Record<string, unknown>;
@@ -15,6 +16,7 @@ export interface AuditEvent {
 
 interface AuditRow {
   id: number;
+  host_id: string;
   action: string;
   volume_name: string | null;
   payload: string | null;
@@ -27,10 +29,16 @@ interface AuditRow {
  * explain after the fact why a volume is gone.
  */
 export const AuditRepository = Object.freeze({
-  record(action: AuditAction, volumeName: string | null, payload: Record<string, unknown> = {}): void {
+  record(
+    hostId: string,
+    action: AuditAction,
+    volumeName: string | null,
+    payload: Record<string, unknown> = {},
+  ): void {
     try {
       SqliteClient.execute(
-        `INSERT INTO ${Table.AUDIT} (action, volume_name, payload, created_at) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO ${Table.AUDIT} (host_id, action, volume_name, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+        hostId,
         action,
         volumeName,
         JSON.stringify(payload),
@@ -38,24 +46,31 @@ export const AuditRepository = Object.freeze({
       );
     } catch (error) {
       // Auditing must never be the reason a user-facing action fails.
-      log.warn({ err: error, action, volumeName }, 'failed to write audit event');
+      log.warn({ err: error, hostId, action, volumeName }, 'failed to write audit event');
     }
   },
 
-  recent(limit: number): AuditEvent[] {
+  recent(hostId: string, limit: number): AuditEvent[] {
     const rows = SqliteClient.select<AuditRow>(
-      `SELECT id, action, volume_name, payload, created_at
-       FROM ${Table.AUDIT} ORDER BY created_at DESC LIMIT ?`,
+      `SELECT id, host_id, action, volume_name, payload, created_at
+       FROM ${Table.AUDIT} WHERE host_id = ? ORDER BY created_at DESC LIMIT ?`,
+      hostId,
       limit,
     );
 
     return rows.map((row) => ({
       id: row.id,
+      hostId: row.host_id,
       action: row.action as AuditAction,
       volumeName: row.volume_name,
       payload: _parsePayload(row.payload),
       createdAtMs: row.created_at,
     }));
+  },
+
+  /** Removes a host's trail when the host is deregistered. */
+  forgetHost(hostId: string): number {
+    return SqliteClient.execute(`DELETE FROM ${Table.AUDIT} WHERE host_id = ?`, hostId);
   },
 });
 

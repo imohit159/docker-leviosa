@@ -2,6 +2,7 @@ import { MillisIn } from '@leviosa/shared';
 import type { VolumeSighting } from '@leviosa/shared';
 import { Config } from '../config/index.config.js';
 import { VolumeRepository } from '../docker/index.docker.js';
+import type { HostContext } from '../docker/index.docker.js';
 import { SightingRepository } from '../store/index.store.js';
 import type { StoredSighting } from '../store/index.store.js';
 import { Clock, Logger } from '../utils/index.utils.js';
@@ -25,10 +26,10 @@ export const SightingService = Object.freeze({
    * One polling round: records, for every volume on the daemon, whether it was
    * attached to anything at this instant.
    */
-  async refresh(): Promise<number> {
+  async refresh(host: HostContext): Promise<number> {
     const [volumes, graph] = await Promise.all([
-      VolumeRepository.listAll(),
-      DependencyService.buildGraph(),
+      VolumeRepository.listAll(host),
+      DependencyService.buildGraph(host),
     ]);
 
     const observations = volumes.map((volume) => ({
@@ -36,8 +37,8 @@ export const SightingService = Object.freeze({
       consumerNames: (graph.get(volume.name) ?? []).map((consumer) => consumer.containerName),
     }));
 
-    SightingRepository.observe(observations);
-    log.debug({ volumes: observations.length }, 'attachment ledger updated');
+    SightingRepository.observe(host.hostId, observations);
+    log.debug({ hostId: host.hostId, volumes: observations.length }, 'attachment ledger updated');
     return observations.length;
   },
 

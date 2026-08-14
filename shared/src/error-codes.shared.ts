@@ -28,5 +28,12 @@ export const ErrorCode = Object.freeze({
 
   JOB_NOT_FOUND: 'JOB_NOT_FOUND',
   QUEUE_SATURATED: 'QUEUE_SATURATED',
+
+  HOST_NOT_FOUND: 'HOST_NOT_FOUND',
+  HOST_ALREADY_EXISTS: 'HOST_ALREADY_EXISTS',
+  /** The reserved local host cannot be deleted or converted to a remote. */
+  HOST_PROTECTED: 'HOST_PROTECTED',
+  /** SSH host key is unknown or has changed; the operator must confirm it. */
+  HOST_KEY_UNVERIFIED: 'HOST_KEY_UNVERIFIED',
 } as const);
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

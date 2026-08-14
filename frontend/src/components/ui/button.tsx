@@ -58,6 +58,8 @@ function Button({
   loading = false,
   disabled,
   children,
+  nativeButton,
+  render,
   ...props
 }: ButtonProps) {
   return (
@@ -67,6 +69,11 @@ function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(buttonVariants({ variant, size, className }), "relative")}
+      // Base UI assumes a native <button> unless told otherwise. `render` replaces
+      // that host (Link, <a>, …), so the default has to follow — otherwise it
+      // throws in development and the composed element loses button semantics.
+      nativeButton={nativeButton ?? render == null}
+      render={render}
       {...props}
     >
       {loading && (
